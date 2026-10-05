@@ -1,0 +1,90 @@
+# ---------------------------------------------------------------
+# Kōlā Collection — environnement de développement
+#   docker compose up -d --build
+#   Front  : http://localhost:5173
+#   API    : http://localhost:8000/api/health
+#   Postgres : localhost:5433 (kola / secret)
+# ---------------------------------------------------------------
+name: kola
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-kola}
+      POSTGRES_USER: ${DB_USERNAME:-kola}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+      TZ: Africa/Brazzaville
+    ports:
+      - "${DB_FORWARD_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-kola} -d ${DB_DATABASE:-kola}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-kola}
+      DB_USERNAME: ${DB_USERNAME:-kola}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      KOLA_AUTO_MIGRATE: "true"
+      KOLA_AUTO_SEED: "true"
+    volumes:
+      - ./backend:/var/www/html
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${API_FORWARD_PORT:-8000}:80"
+    volumes:
+      - ./backend:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    restart: unless-stopped
+    depends_on:
+      - nginx
+    environment:
+      VITE_API_PROXY_TARGET: http://nginx
+      VITE_API_MODE: ${VITE_API_MODE:-mock}
+      VITE_USE_POLLING: "true"
+    ports:
+      - "${FRONT_FORWARD_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+
+  # Interface web PostgreSQL (optionnelle) : docker compose --profile tools up -d
+  adminer:
+    image: adminer:latest
+    profiles: ["tools"]
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+
+volumes:
+  pgdata:
+  frontend_node_modules:

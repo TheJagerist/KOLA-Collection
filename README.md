@@ -1,145 +1,82 @@
-# Kōlā Collection — Plateforme de commande d'uniformes scolaires
+# Kōlā Collection
 
-> Plateforme web de commande en ligne d'uniformes scolaires conformes au règlement en vigueur en République du Congo. Elle permet aux **parents** de commander pour leurs enfants et aux **élèves** de commander eux-mêmes, avec livraison à domicile à Brazzaville et Pointe-Noire.
+Plateforme de commande en ligne d'uniformes scolaires conformes au règlement en vigueur en République du Congo : kaki pour les garçons, bleu ciel et bleu de nuit pour les filles. Livraison à Brazzaville et Pointe-Noire, paiement Airtel Money / MTN Mobile Money (acompte de 50 %, solde à la livraison).
 
----
-
-## Contexte
-
-Trouver l'uniforme réglementaire au Congo (kaki pour les garçons, bleu ciel et bleu de nuit pour les filles) passe encore souvent par le marché : files d'attente, prix variables, tailles non garanties. Kōlā centralise la commande en un catalogue clair, un paiement Mobile Money / Airtel Money, et une livraison suivie.
-
-La plateforme cible exclusivement les niveaux **collège et lycée**.
-
----
-
-## Stack technique
-
-| Couche | Choix |
-|---|---|
-| Frontend | HTML / CSS / JavaScript vanille (SPA mono-fichier) |
-| Backend / Auth | [Supabase](https://supabase.com) (Postgres + Auth + Storage + Edge Functions) |
-| Hébergement | [Netlify](https://netlify.com) |
-| Prise de commande | Lien WhatsApp pré-rempli (`wa.me`) généré côté client |
-
----
-
-## Fonctionnalités
-
-### Côté client
-- Catalogue filtrable par ensemble (garçon/fille), catégorie (chemise, pantalon, jupe) et niveau scolaire
-- Fiche produit avec description, détails de construction et croquis technique (si disponible)
-- Panier avec ajustement des quantités, taille et niveau scolaire par article
-- Acompte de 50 % à la commande, solde à la livraison
-- À la validation, génération automatique d'un lien WhatsApp pré-rempli (récapitulatif complet) pour finaliser avec l'équipe Kōlā
-- Guide des tailles avec tableaux garçon/fille et silhouettes SVG annotées
-
-### Authentification
-Trois méthodes disponibles :
-- **Nom d'utilisateur + mot de passe** (méthode principale, sans e-mail)
-- **Google OAuth**
-- **SMS OTP** (interface présente, fournisseur SMS à configurer)
-
-L'inscription distingue le profil **Parent** (commande pour ses enfants) et **Élève** (commande personnelle).
-
-### Côté administration (`/admin`, accès `is_admin`)
-- Gestion des **collections** (une seule active à la fois ; bascule catalogue + contenu accueil)
-- Édition du **contenu de l'accueil** (accroche, titre, texte, libellé du CTA)
-- Gestion du **carrousel** d'arrière-plan du hero (ajout, suppression, réordonnancement)
-- **CRUD produits** avec upload d'image de couverture et de croquis technique
-- Gestion des **commandes** : filtres par statut, changement de statut avec confirmation
-
-Cycle de vie d'une commande : `en_attente → validee → transit → livre` (+ `annulee`).  
-Le passage à `livre` enregistre automatiquement le solde comme encaissé.
-
----
-
-## Structure du projet
+## Architecture
 
 ```
 KOLA-Collection/
-├── index.html          # Application complète (SPA)
-└── README.md
+├── frontend/            React 19 + TypeScript + Vite + Tailwind CSS 4   (Mulho)
+├── backend/             API Laravel 13 + Sanctum + PostgreSQL            (Manu)
+├── README-MANU.md       Guide de prise en main du backend
+├── docker/              Dockerfile PHP-FPM, config Nginx
+├── docs/API.md          Contrat d'API entre le front et le back
+├── legacy/index.html    Ancien site (SPA Supabase), conservé pour référence
+└── docker-compose.yml
 ```
 
-L'ensemble du frontend (HTML, CSS, JS) est contenu dans `index.html`. Les assets (images produits, carrousel, pages décoratives) sont hébergés dans le bucket Supabase Storage `product-images`.
+| Service | Image | Port local | Rôle |
+|---|---|---|---|
+| `frontend` | node:22-alpine | **5173** | Vite (HMR), proxy `/api` et `/storage` vers Nginx |
+| `nginx` | nginx:1.27-alpine | **8000** | Sert l'API Laravel |
+| `api` | PHP 8.3-FPM (`docker/php`) | — | Laravel ; `composer install`, `key:generate`, `migrate` et seed (si base vide) automatiques au démarrage |
+| `db` | postgres:16-alpine | **5433** | Base `kola` / utilisateur `kola` / mot de passe `secret` |
+| `adminer` | adminer | 8080 | Optionnel : `docker compose --profile tools up -d` |
 
----
+## Démarrage rapide
 
-## Configuration Supabase
-
-Les deux variables à renseigner dans `index.html` (section `<script>`) :
-
-```js
-const SUPABASE_URL = 'https://<votre-projet>.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_...'; // clé publishable uniquement — jamais la secret key
-```
-
-### Schéma de base de données
-
-| Table | Description |
-|---|---|
-| `profiles` | Créée automatiquement par trigger à l'inscription — `full_name`, `role`, `is_admin` |
-| `collections` | Collections de produits (une seule `is_active` à la fois) |
-| `homepage_content` | Contenu du hero par collection |
-| `carousel_images` | Images du carrousel par collection |
-| `products` | Catalogue — `name`, `price`, `cat`, `ensemble`, `sizes`, `niveaux`, `image_url`, `sketch_image_url` |
-| `orders` | Commandes — statut, total, acompte, solde, méthode de paiement |
-| `order_items` | Lignes de commande |
-
-RLS activée sur toutes les tables. Le catalogue est en lecture publique ; les commandes ne sont visibles que par leur propriétaire.
-
-### Edge Function
-
-`register-user` — crée un compte Supabase Auth déjà confirmé à partir d'un nom d'utilisateur, sans envoi d'e-mail. Utilisée pour contourner l'absence de toggle « Confirm email » dans certains dashboards Supabase.
-
-### Google OAuth
-
-- Provider Google activé dans Supabase (Authentication > Providers)
-- URI de redirection : `https://<votre-projet>.supabase.co/auth/v1/callback`
-- Redirect URL Supabase : URL de production (ex. `https://kola-uniforme.netlify.app/**`)
-
----
-
-## Lancement local
-
-Aucun build requis. Ouvrir `index.html` directement dans un navigateur, ou via un serveur local :
+Prérequis : Docker Desktop (Windows / macOS) ou Docker Engine + Compose v2.
 
 ```bash
-# Python
-python -m http.server 8080
-
-# Node
-npx serve .
+git clone https://github.com/TheJagerist/KOLA-Collection.git
+cd KOLA-Collection
+docker compose up -d --build
 ```
 
-> Les appels Supabase fonctionnent depuis `localhost` tant que l'URL est ajoutée dans **Supabase → Authentication → URL Configuration → Redirect URLs**.
+- Site : http://localhost:5173
+- API : http://localhost:8000/api/health
 
----
+Le premier démarrage prend quelques minutes (installation de Composer et de npm dans les conteneurs).
 
-## Déploiement (Netlify)
+### Mode démo / mode API
 
-1. Connecter le dépôt GitHub à Netlify
-2. Publish directory : `.` (racine)
-3. Build command : *(laisser vide)*
-4. Le fichier `index.html` est servi directement
+Le front fonctionne **sans backend** grâce à un mock qui reprend les vraies données de l'ancien site (`VITE_API_MODE=mock`, valeur par défaut). Comptes de démo :
 
----
+| Rôle | Utilisateur | Mot de passe |
+|---|---|---|
+| Client | `nathalie242` | `kola1234` |
+| Admin | `admin` | `admin1234` |
 
-## Roadmap
+L'API Laravel gère déjà tout le parcours client (catalogue, comptes, commandes) ; l'administration est en cours (voir [`README-MANU.md`](README-MANU.md)). Pour brancher le front sur l'API :
 
-- [ ] SMS OTP — intégration fournisseur SMS (Twilio / Africa's Talking)
-- [ ] Anti-spam inscription
-- [ ] Récupération de mot de passe par SMS
-- [ ] Paiement Mobile Money réel (Airtel Money / MTN Mobile Money)
-- [ ] E-mail de confirmation de commande automatique
-- [ ] Finalisation des mentions légales (RCCM, NIU, hébergeur)
-- [ ] Photos produits réelles (remplacement des placeholders dégradés)
+```bash
+cp .env.example .env          # puis VITE_API_MODE=http
+docker compose up -d frontend
+```
 
----
+## Commandes utiles
+
+```bash
+docker compose logs -f api                        # logs Laravel
+docker compose exec api php artisan migrate        # migrations
+docker compose exec api php artisan make:model Product -mfc
+docker compose exec api php artisan test
+docker compose exec api composer require laravel/socialite
+docker compose exec frontend npm install <paquet>
+docker compose exec frontend npm run build
+docker compose down            # arrêter
+docker compose down -v         # arrêter ET effacer la base
+```
+
+> Sous Windows, gardez le projet dans un dossier simple (ex. `C:\KOLA-Collection`) et laissez Git convertir les fins de ligne : le fichier `.gitattributes` force `LF` pour les scripts shell utilisés par Docker.
+
+## Production (aperçu)
+
+- **Front** : `docker build --target prod -t kola-front ./frontend`, une image Nginx qui sert le build statique avec le fallback SPA. Variables de build : `VITE_API_MODE=http`, `VITE_API_URL`, `VITE_WHATSAPP_NUMBER`.
+- **API** : même image PHP (`docker/php/Dockerfile`) avec `APP_ENV=production`, `APP_DEBUG=false`, puis `composer install --no-dev -o` et `php artisan optimize`.
+- Servir le front et l'API sur le même domaine (ex. `kolacollection.cg` et `kolacollection.cg/api`) pour éviter le CORS.
 
 ## Identité visuelle
-
-Dérivée du logo Kōlā :
 
 | Token | Valeur |
 |---|---|
@@ -147,9 +84,21 @@ Dérivée du logo Kōlā :
 | Fond crème | `#F7F2E9` |
 | Accent rouille (CTA) | `#C9622E` |
 | Kaki uniforme | `#B5A47C` |
-| Bleu nuit (hero) | `#1B2A4A` |
-| Titres | Fraunces (serif) |
+| Bleu nuit | `#1B2A4A` |
+| Titres | Fraunces |
 | Corps / UI | Work Sans |
+
+Les tokens sont définis dans `frontend/src/index.css` (`@theme` Tailwind) : `bg-brun-800`, `text-rouille-500`, `bg-nuit-900`…
+
+## Roadmap
+
+- [x] Base de l'API Laravel : schéma, seeders, catalogue, comptes, commandes (prix calculés côté serveur), tests
+- [ ] Endpoints d'administration, connexion Google — voir [`README-MANU.md`](README-MANU.md) (Manu)
+- [ ] Paiement Mobile Money réel (Airtel Money / MTN MoMo)
+- [ ] Notifications de commande (e-mail / WhatsApp Business)
+- [ ] Récupération de mot de passe
+- [ ] Mentions légales définitives (RCCM, NIU, hébergeur)
+- [ ] Photos produits définitives
 
 ---
 

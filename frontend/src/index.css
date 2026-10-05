@@ -1,0 +1,142 @@
+@import 'tailwindcss';
+
+/* Mode sombre piloté par la classe .dark sur <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Jetons sémantiques : ils changent avec le thème */
+:root {
+  --page: #f7f2e9;
+  --surface: #fffdf9;
+  --surface-2: #efe7d8;
+  --line: #e1d6c1;
+  --ink: #2f2318;
+  --ink-soft: #5c4a34;
+  --ink-muted: #8a7a63;
+  --inverse: #3d2e1f;
+  --on-inverse: #fffdf9;
+  --photo: #e9e7e2;
+  color-scheme: light;
+}
+.dark {
+  --page: #14100b;
+  --surface: #1e1711;
+  --surface-2: #2a2118;
+  --line: #3a2e22;
+  --ink: #f4ede1;
+  --ink-soft: #cdbfa9;
+  --ink-muted: #9c8c75;
+  --inverse: #f4ede1;
+  --on-inverse: #1c140d;
+  --photo: #d9d5cd;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-inverse: var(--inverse);
+  --color-on-inverse: var(--on-inverse);
+  --color-photo: var(--photo);
+}
+
+@theme {
+  --font-display: 'Fraunces', ui-serif, Georgia, serif;
+  --font-sans: 'Work Sans', ui-sans-serif, system-ui, sans-serif;
+
+  --color-brun-950: #1c140d;
+  --color-brun-900: #241a11;
+  --color-brun-800: #3d2e1f;
+  --color-brun-600: #5c4a34;
+  --color-brun-400: #8a7a63;
+
+  --color-creme-50: #fffdf9;
+  --color-creme-100: #f7f2e9;
+  --color-creme-200: #efe7d8;
+  --color-creme-300: #e1d6c1;
+
+  --color-kaki-100: #ece5d3;
+  --color-kaki-200: #d9cdae;
+  --color-kaki-300: #c4b48a;
+  --color-kaki-400: #b5a47c;
+  --color-kaki-600: #8c6f47;
+
+  --color-rouille-400: #dc7a47;
+  --color-rouille-500: #c9622e;
+  --color-rouille-600: #a94e22;
+  --color-rouille-50: #fbeee6;
+
+  --color-ciel-100: #dcebf7;
+  --color-ciel-300: #9cc7e8;
+  --color-ciel-400: #6fa8d2;
+
+  --color-nuit-500: #2e4270;
+  --color-nuit-800: #1b2a4a;
+  --color-nuit-900: #101b33;
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-marquee: marquee 40s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+    50% { transform: translateY(-12px) rotate(-0.5deg); }
+  }
+  @keyframes shimmer {
+    100% { transform: translateX(100%); }
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+  body {
+    overflow-x: clip;
+    @apply bg-page font-sans text-ink antialiased;
+    font-feature-settings: 'ss01', 'cv11';
+  }
+  h1, h2, h3, h4 {
+    @apply font-display tracking-tight text-ink;
+    font-optical-sizing: auto;
+  }
+  ::selection {
+    @apply bg-rouille-500 text-creme-50;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-rouille-500;
+  }
+  input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; }
+}
+
+@layer components {
+  .container-k {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+  .kicker {
+    @apply text-[11px] font-semibold tracking-[0.18em] text-rouille-600 uppercase;
+  }
+  .field {
+    @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-[15px] text-ink transition placeholder:text-ink-muted/70 focus:border-rouille-500 focus:ring-4 focus:ring-rouille-500/10 focus:outline-none disabled:opacity-60;
+  }
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-ink-soft;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
