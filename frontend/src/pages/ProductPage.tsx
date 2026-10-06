@@ -249,8 +249,10 @@ function ProductDetail({ product, related }: { product: Product; related: Produc
               { Icon: Smartphone, t: 'Mobile Money', s: 'Airtel ou MTN' },
               { Icon: ShieldCheck, t: 'Conforme', s: 'Règlement scolaire' },
             ].map(({ Icon, t, s }) => (
-              <div key={t} className="rounded-2xl bg-surface-2/70 p-4">
-                <Icon className="size-5 text-rouille-600" />
+              <div key={t} className="group rounded-2xl bg-surface-2/70 p-4">
+                <span className="icon-3d grid size-10 place-items-center rounded-xl text-rouille-600">
+                  <Icon className="size-5" />
+                </span>
                 <div className="mt-2 text-[14px] font-semibold text-ink">{t}</div>
                 <div className="text-[12.5px] text-ink-muted">{s}</div>
               </div>

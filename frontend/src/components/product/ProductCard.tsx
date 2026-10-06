@@ -6,6 +6,7 @@ import { fcfa, productKicker, sizeRange } from '../../lib/format';
 import { useUi } from '../../stores/ui';
 import { ProductImage } from './ProductImage';
 import { FavoriteButton } from './FavoriteButton';
+import { Tilt3D } from '../fx/Tilt3D';
 
 export function ProductCard({ product, index = 0 }: { product: Product; index?: number }) {
   const openQuickView = useUi((s) => s.openQuickView);
@@ -17,7 +18,8 @@ export function ProductCard({ product, index = 0 }: { product: Product; index?: 
       transition={{ duration: 0.6, delay: (index % 4) * 0.07, ease: [0.22, 1, 0.36, 1] }}
       className="group relative flex flex-col"
     >
-      <div className="relative overflow-hidden rounded-3xl transition duration-500 ease-out-soft group-hover:-translate-y-1 group-hover:shadow-[0_24px_50px_-28px_rgba(61,46,31,0.55)]">
+      <Tilt3D max={8} innerClassName="rounded-3xl">
+      <div className="shine-group relative overflow-hidden rounded-3xl transition duration-500 ease-out-soft group-hover:shadow-[0_24px_50px_-28px_rgba(61,46,31,0.55)]">
         <Link to={`/produit/${product.slug}`} className="block" aria-label={product.name}>
           <ProductImage product={product} className="aspect-[4/5]" imgClassName="transition duration-700 ease-out-soft group-hover:scale-[1.05]" />
           {product.sketch_url && (
@@ -30,20 +32,21 @@ export function ProductCard({ product, index = 0 }: { product: Product; index?: 
           )}
         </Link>
         {product.badge && (
-          <span className="pointer-events-none absolute top-3 left-3 rounded-full bg-surface/90 px-3 py-1 text-[11px] font-semibold tracking-wide text-ink shadow-sm backdrop-blur">
+          <span className="pointer-events-none absolute top-3 left-3 glass-photo rounded-full px-3 py-1 text-[11px] font-semibold tracking-wide text-ink">
             {product.badge}
           </span>
         )}
         <FavoriteButton productId={product.id} name={product.name} className="absolute top-3 right-3" />
         <button
           onClick={() => openQuickView(product)}
-          className="absolute right-3 bottom-3 flex h-11 items-center gap-1.5 rounded-full bg-inverse pr-4 pl-3 text-[13px] font-semibold text-on-inverse shadow-lg transition duration-300 hover:bg-rouille-500 hover:text-white active:scale-95 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 sm:focus-visible:translate-y-0 sm:focus-visible:opacity-100"
+          className="shine absolute right-3 bottom-3 flex h-11 items-center gap-1.5 rounded-full bg-inverse pr-4 pl-3 text-[13px] font-semibold text-on-inverse shadow-lg transition duration-300 hover:bg-rouille-500 hover:text-white active:scale-95 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 sm:focus-visible:translate-y-0 sm:focus-visible:opacity-100"
           aria-label={`Ajouter ${product.name} au panier`}
         >
           <Plus className="size-4" />
           <span className="max-sm:hidden">Ajout rapide</span>
         </button>
       </div>
+      </Tilt3D>
       <div className="mt-3 flex flex-col gap-1 px-1 sm:mt-4 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
         <div className="min-w-0">
           <div className="text-[11px] font-semibold tracking-[0.14em] text-kaki-600 uppercase dark:text-kaki-300">{productKicker(product)}</div>

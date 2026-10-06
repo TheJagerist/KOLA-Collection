@@ -64,7 +64,7 @@ export function Sheet({ open, onClose, title, children, footer, className }: She
               if (info.offset.y > 120 || info.velocity.y > 600) onClose();
             }}
             className={cn(
-              'absolute flex flex-col bg-page shadow-2xl',
+              'glass absolute flex flex-col border',
               desktop ? 'inset-y-0 right-0 w-full max-w-md' : 'inset-x-0 bottom-0 max-h-[88dvh] rounded-t-[28px]',
               className,
             )}

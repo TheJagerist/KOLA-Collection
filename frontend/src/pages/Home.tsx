@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { animate, AnimatePresence, motion, useInView, useMotionValue, useScroll, useSpring, useTransform } from 'motion/react';
 import { ArrowRight, ArrowUpRight, ChevronDown, CreditCard, Ruler, ShieldCheck, Smartphone, Truck } from 'lucide-react';
@@ -11,6 +11,12 @@ import { ProductCard, ProductCardSkeleton } from '../components/product/ProductC
 import type { Category } from '../lib/api/types';
 import { CATEGORY_PLURAL } from '../lib/format';
 import { contactWhatsAppLink } from '../lib/whatsapp';
+import { Tilt3D } from '../components/fx/Tilt3D';
+import { Carousel3D } from '../components/fx/Carousel3D';
+import { canRender3D } from '../components/fx/canRender3D';
+
+// three.js (~150 Ko gzip) n'est téléchargé que si l'appareil peut afficher la scène 3D
+const FabricScene = lazy(() => import('../components/fx/FabricScene'));
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -30,6 +36,7 @@ export default function Home() {
       <KeyFigures />
       <Selection />
       <Ensembles />
+      <Showcase3D />
       <Lookbook />
       <Steps />
       <Trust />
@@ -43,6 +50,7 @@ function Hero() {
   const { data } = useStorefront();
   const user = useAuth((s) => s.user);
   const content = data?.homepage ?? FALLBACK;
+  const [show3D] = useState(canRender3D);
   const images = data?.carousel ?? [];
   const [index, setIndex] = useState(0);
   const ref = useRef<HTMLElement>(null);
@@ -108,7 +116,7 @@ function Hero() {
             initial={{ opacity: 0, y: 12, filter: 'blur(6px)' }}
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             transition={{ duration: 0.7 }}
-            className="mb-6 inline-flex items-center gap-2 rounded-full border border-creme-50/15 bg-creme-50/5 px-4 py-1.5 text-[12.5px] font-medium text-kaki-200 backdrop-blur"
+            className="glass-dark mb-6 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-[12.5px] font-medium text-kaki-200"
           >
             <span className="relative flex size-2">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-rouille-400 opacity-75" />
@@ -144,7 +152,7 @@ function Hero() {
               {content.cta_primary_label || 'Voir le catalogue'}
             </ButtonLink>
             {!user && (
-              <ButtonLink to="/inscription" size="lg" variant="outline" className="border-creme-50/25 text-creme-50 hover:border-creme-50/60 hover:bg-creme-50/5">
+              <ButtonLink to="/inscription" size="lg" variant="outline" className="glass-dark shine text-creme-50 hover:bg-white/15">
                 Créer mon compte
               </ButtonLink>
             )}
@@ -167,9 +175,14 @@ function Hero() {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.4, ease: EASE }}
-          className="hidden justify-self-end [perspective:1000px] lg:block"
+          className="relative hidden justify-self-end [perspective:1000px] lg:block"
         >
-          <motion.div style={{ rotateX: rx, rotateY: ry }}>
+          {show3D && (
+            <Suspense fallback={null}>
+              <FabricScene className="pointer-events-none absolute -inset-x-48 -inset-y-32 opacity-80 mix-blend-screen [mask-image:radial-gradient(closest-side,black_55%,transparent)]" />
+            </Suspense>
+          )}
+          <motion.div style={{ rotateX: rx, rotateY: ry }} className="relative">
             <div className="animate-float">
               <UniformCard />
             </div>
@@ -193,13 +206,13 @@ function Hero() {
 
 function UniformCard() {
   return (
-    <div className="w-[380px] rounded-[28px] border border-white/10 bg-[#fffdf9]/95 p-6 text-[#241a11] shadow-[0_40px_80px_-30px_rgba(0,0,0,0.7)] backdrop-blur">
+    <div className="glass-dark shine mirror relative w-[380px] rounded-[28px] p-6 text-creme-50">
       <div className="flex items-start justify-between">
         <div>
           <div className="font-display text-lg font-semibold">Fiche uniforme</div>
-          <div className="text-[13px] text-kaki-600">Collège & lycée — deux ensembles</div>
+          <div className="text-[13px] text-kaki-200">Collège & lycée — deux ensembles</div>
         </div>
-        <span className="rounded-full bg-[#efe7d8] px-3 py-1 text-[11px] font-semibold">6ème · Taille 12</span>
+        <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold">6ème · Taille 12</span>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3">
         <Swatch className="bg-gradient-to-br from-kaki-300 to-kaki-400" title="Garçon" sub="Chemise + pantalon kaki" />
@@ -207,10 +220,10 @@ function UniformCard() {
         <Swatch className="bg-gradient-to-br from-kaki-400 to-kaki-600" title="Garçon · bas" sub="Pantalon coupe large" light />
         <Swatch className="bg-gradient-to-br from-nuit-500 to-nuit-800" title="Fille · bas" sub="Jupe ou pantalon bleu nuit" light />
       </div>
-      <div className="mt-5 flex items-center justify-between border-t border-[#e1d6c1] pt-4 text-[13px]">
+      <div className="mt-5 flex items-center justify-between border-t border-white/15 pt-4 text-[13px]">
         <span className="tracking-widest text-rouille-500">★★★★★</span>
-        <span className="flex items-center gap-1.5 font-medium text-[#5c4a34]">
-          <ShieldCheck className="size-4 text-emerald-700" /> Conforme au règlement
+        <span className="flex items-center gap-1.5 font-medium text-creme-200">
+          <ShieldCheck className="size-4 text-emerald-400" /> Conforme au règlement
         </span>
       </div>
     </div>
@@ -376,7 +389,8 @@ function Ensembles() {
 function EnsembleTile({ to, title, sub, image, className, dots }: { to: string; title: string; sub: string; image: string; className: string; dots: string[] }) {
   return (
     <motion.div initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-60px' }} transition={{ duration: 0.7, ease: EASE }}>
-      <Link to={to} className={`group relative flex min-h-[280px] overflow-hidden rounded-[32px] p-7 sm:min-h-[420px] sm:p-10 ${className}`}>
+      <Tilt3D max={6} scale={1.01} innerClassName="rounded-[32px]">
+      <Link to={to} className={`shine-group group relative flex min-h-[300px] overflow-hidden rounded-[32px] p-7 sm:min-h-[420px] sm:p-10 ${className}`}>
         <div className="relative z-10 flex max-w-[48%] flex-col">
           <div className="flex gap-1.5">
             {dots.map((d) => (
@@ -387,7 +401,7 @@ function EnsembleTile({ to, title, sub, image, className, dots }: { to: string; 
           <p className="mt-2 text-[15px] text-ink-soft">{sub}</p>
           <span className="mt-auto inline-flex items-center gap-2 pt-8 text-[14px] font-semibold text-ink">
             Découvrir
-            <span className="grid size-9 place-items-center rounded-full bg-inverse text-on-inverse transition group-hover:bg-rouille-500 group-hover:text-white">
+            <span className="btn-3d-dark grid size-9 place-items-center rounded-full bg-inverse text-on-inverse transition group-hover:bg-rouille-500 group-hover:text-white">
               <ArrowUpRight className="size-4 transition group-hover:rotate-45" />
             </span>
           </span>
@@ -395,10 +409,29 @@ function EnsembleTile({ to, title, sub, image, className, dots }: { to: string; 
         <img
           src={image}
           alt=""
-          className="absolute inset-y-3 right-3 w-[46%] max-w-[300px] rounded-[24px] object-cover transition duration-700 ease-out-soft group-hover:scale-[1.04] group-hover:-rotate-1"
+          className="mirror absolute top-5 right-5 h-[58%] w-[44%] max-w-[280px] rounded-[22px] object-cover shadow-[0_20px_40px_-20px_rgba(28,20,13,0.5)] transition duration-700 ease-out-soft group-hover:-translate-y-1.5 group-hover:scale-[1.03]"
         />
       </Link>
+      </Tilt3D>
     </motion.div>
+  );
+}
+
+/* ================================================================ VITRINE 3D */
+function Showcase3D() {
+  const { data } = useProducts({ sort: 'populaires' });
+  if (!data?.length) return null;
+  return (
+    <section className="overflow-x-clip pb-20 sm:pb-28">
+      <div className="container-k mb-6 text-center">
+        <Reveal>
+          <div className="kicker mb-3">Vitrine 3D</div>
+          <h2 className="text-4xl sm:text-5xl">Faites le tour de la collection</h2>
+          <p className="mx-auto mt-3 max-w-md text-[15px] text-ink-soft">Glissez pour faire tourner, touchez un article pour le voir en détail.</p>
+        </Reveal>
+      </div>
+      <Carousel3D products={data.slice(0, 8)} />
+    </section>
   );
 }
 
@@ -520,9 +553,9 @@ function Trust() {
             viewport={{ once: true }}
             transition={{ delay: i * 0.1, duration: 0.6, ease: EASE }}
             whileHover={{ x: 6 }}
-            className="flex gap-5 rounded-3xl border border-line bg-surface p-6"
+            className="group flex gap-5 rounded-3xl border border-line bg-surface p-6"
           >
-            <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-surface-2 text-rouille-600">
+            <div className="icon-3d grid size-12 shrink-0 place-items-center rounded-2xl text-rouille-600">
               <Icon className="size-5" />
             </div>
             <div>

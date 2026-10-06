@@ -43,7 +43,7 @@ export function Modal({ open, onClose, title, eyebrow, children, className }: Mo
             exit={{ opacity: 0, y: 30 }}
             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
             className={cn(
-              'relative max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl bg-surface p-6 shadow-2xl sm:max-w-lg sm:rounded-3xl sm:p-8',
+              'glass relative max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border p-6 sm:max-w-lg sm:rounded-3xl sm:p-8',
               className,
             )}
           >

@@ -18,7 +18,7 @@ export function Toaster() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.96 }}
               onClick={() => dismiss(t.id)}
-              className="pointer-events-auto flex max-w-md items-center gap-3 rounded-2xl bg-brun-900 px-4 py-3 text-left text-sm text-creme-100 shadow-xl"
+              className="pointer-events-auto flex max-w-md items-center gap-3 rounded-2xl border border-white/10 bg-brun-900/80 px-4 py-3 backdrop-blur-xl backdrop-saturate-150 text-left text-sm text-creme-100 shadow-xl"
             >
               <Icon className={cn('size-5 shrink-0', t.tone === 'success' ? 'text-emerald-400' : t.tone === 'error' ? 'text-rouille-400' : 'text-kaki-300')} />
               {t.message}

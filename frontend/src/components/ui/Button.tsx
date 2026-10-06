@@ -7,11 +7,11 @@ type Variant = 'primary' | 'dark' | 'outline' | 'ghost' | 'light' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
 const base =
-  'inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-all duration-200 ease-out-soft disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98] whitespace-nowrap';
+  'relative inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-all duration-200 ease-out-soft disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98] whitespace-nowrap';
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-rouille-500 text-creme-50 shadow-[0_8px_24px_-10px_rgba(201,98,46,0.7)] hover:bg-rouille-600',
-  dark: 'bg-inverse text-on-inverse hover:opacity-90',
+  primary: 'shine btn-3d bg-rouille-500 text-creme-50 hover:bg-rouille-600',
+  dark: 'btn-3d-dark bg-inverse text-on-inverse hover:opacity-90',
   outline: 'border border-ink/15 bg-transparent text-ink hover:border-ink/40 hover:bg-ink/[0.04]',
   ghost: 'text-ink hover:bg-ink/5',
   light: 'bg-[#fffdf9] text-[#241a11] hover:bg-white',

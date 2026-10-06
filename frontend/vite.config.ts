@@ -8,6 +8,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    // three.js (scène 3D du hero) est volumineux mais chargé à la demande, jamais au démarrage
+    build: { chunkSizeWarningLimit: 600 },
     server: {
       host: true,
       port: 5173,

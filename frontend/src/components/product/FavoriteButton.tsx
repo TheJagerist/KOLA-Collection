@@ -19,7 +19,7 @@ export function FavoriteButton({ productId, name, className, size = 'md' }: { pr
         toast.show(added ? 'Ajouté à vos favoris' : 'Retiré de vos favoris');
       }}
       className={cn(
-        'relative grid place-items-center rounded-full bg-surface/90 text-ink shadow-sm backdrop-blur transition hover:scale-105 active:scale-90',
+        'glass-photo relative grid place-items-center rounded-full text-ink transition hover:scale-105 active:scale-90',
         size === 'lg' ? 'size-12' : 'size-10',
         className,
       )}

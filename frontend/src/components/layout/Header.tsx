@@ -8,6 +8,9 @@ import { useUi } from '../../stores/ui';
 import { useFavorites } from '../../stores/favorites';
 import { Logo } from '../ui/misc';
 import { ThemeToggle } from './ThemeToggle';
+import { Socials } from './Footer';
+import { WhatsAppIcon } from '../ui/icons';
+import { contactWhatsAppLink } from '../../lib/whatsapp';
 import { cn } from '../../lib/cn';
 
 const NAV = [
@@ -85,7 +88,7 @@ export function Header() {
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
           'sticky top-0 z-40 border-b transition-colors duration-300',
-          scrolled ? 'border-line/80 bg-page/80 backdrop-blur-xl backdrop-saturate-150' : 'border-transparent bg-page',
+          scrolled ? 'glass' : 'border-transparent bg-page',
         )}
       >
         <div className="container-k flex h-16 items-center justify-between gap-4 sm:h-[72px]">
@@ -178,7 +181,7 @@ export function Header() {
               dragConstraints={{ left: 0, right: 0 }}
               dragElastic={{ left: 0, right: 0.5 }}
               onDragEnd={(_, i) => (i.offset.x > 100 || i.velocity.x > 500) && setOpen(false)}
-              className="absolute inset-y-0 right-0 flex w-[86%] max-w-sm flex-col bg-page shadow-2xl"
+              className="glass absolute inset-y-0 right-0 flex w-[86%] max-w-sm flex-col border-l"
             >
               <div className="flex h-16 items-center justify-between border-b border-line px-5">
                 <Logo className="h-7 dark:hidden" />
@@ -206,9 +209,35 @@ export function Header() {
                   </motion.div>
                 ))}
               </nav>
-              <div className="flex items-center justify-between border-t border-line p-5">
-                <span className="text-[14px] text-ink-soft">Apparence</span>
-                <ThemeToggle expanded />
+              {/* Remplace le footer sur mobile : contact, réseaux, mentions légales */}
+              <div className="space-y-4 border-t border-line p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+                <a
+                  href={contactWhatsAppLink()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 rounded-2xl bg-surface-2 p-3.5 transition active:scale-[0.98]"
+                >
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#25D366] text-white">
+                    <WhatsAppIcon className="size-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[14px] font-semibold text-ink">Une question ?</span>
+                    <span className="block text-[12.5px] text-ink-muted">On vous répond sur WhatsApp</span>
+                  </span>
+                </a>
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-ink-soft">Apparence</span>
+                  <ThemeToggle expanded />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Socials size="sm" />
+                </div>
+                <div className="flex items-center justify-between text-[12px] text-ink-muted">
+                  <span>© {new Date().getFullYear()} Kōlā Collection</span>
+                  <Link to="/mentions-legales" className="underline-offset-4 hover:underline">
+                    Mentions légales
+                  </Link>
+                </div>
               </div>
             </motion.aside>
           </div>
