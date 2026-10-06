@@ -3,38 +3,83 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\CarouselImageResource;
+use App\Models\CarouselImage;
+use App\Models\Collection;
+use App\Support\Media;
 use Illuminate\Http\Request;
 
-/**
- * TODO (Manu) — Images du carrousel de la collection active. Spécification : docs/API.md §6.
- * Briques prêtes : App\Support\Media::store()/delete(), CarouselImageResource.
- */
 class CarouselController extends Controller
 {
-    /** GET /api/admin/carousel — images de la collection active, triées par position */
     public function index()
     {
-        $this->todo('liste du carrousel');
+        $active = Collection::active();
+
+        if (! $active) {
+            return CarouselImageResource::collection(collect());
+        }
+
+        return CarouselImageResource::collection(
+            $active->carouselImages
+        );
     }
 
-    /**
-     * POST /api/admin/carousel (multipart images[]) — validation 'images.*' => image|max:10240
-     * Ajout en fin de liste (position = max + 1). Retour : la liste complète.
-     */
     public function store(Request $request)
     {
-        $this->todo("ajout d'images au carrousel");
+        $active = Collection::active();
+
+        if (! $active) {
+            return response()->json([
+                'message' => 'Aucune collection active.',
+            ], 409);
+        }
+
+        $request->validate([
+            'images'   => ['required', 'array', 'min:1'],
+            'images.*' => ['image', 'max:10240'],
+        ]);
+
+        $maxPosition = $active->carouselImages()->max('position') ?? 0;
+
+        foreach ($request->file('images') as $file) {
+            $path = Media::store($file, 'carousel');
+            CarouselImage::create([
+                'collection_id' => $active->id,
+                'path'          => $path,
+                'position'      => ++$maxPosition,
+            ]);
+        }
+
+        return CarouselImageResource::collection(
+            $active->carouselImages()->get()
+        );
     }
 
-    /** DELETE /api/admin/carousel/{image} — supprimer aussi le fichier (Media::delete) ; 204 */
-    public function destroy(int $image)
+    public function destroy(CarouselImage $image)
     {
-        $this->todo("suppression d'une image du carrousel");
+        Media::delete($image->path);
+        $image->delete();
+
+        return response()->noContent();
     }
 
-    /** POST /api/admin/carousel/reorder { ids: [3,1,2] } — position = index + 1 ; retour : la liste */
     public function reorder(Request $request)
     {
-        $this->todo('réorganisation du carrousel');
+        $active = Collection::active();
+
+        $data = $request->validate([
+            'ids'   => ['required', 'array'],
+            'ids.*' => ['integer'],
+        ]);
+
+        foreach ($data['ids'] as $position => $id) {
+            CarouselImage::where('id', $id)
+                ->where('collection_id', $active?->id)
+                ->update(['position' => $position + 1]);
+        }
+
+        return CarouselImageResource::collection(
+            $active?->carouselImages()->get() ?? collect()
+        );
     }
 }

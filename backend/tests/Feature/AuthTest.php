@@ -65,15 +65,16 @@ class AuthTest extends TestCase
 {
     $this->getJson('/api/auth/google/redirect')->assertStatus(501);
 
+    // Un client ne peut pas accéder à l'admin
     $client = User::factory()->create();
     $this->actingAs($client)->getJson('/api/admin/orders')->assertForbidden();
 
-    // /api/admin/orders est maintenant implémenté (retourne 200 pour un admin).
-    // Les autres endpoints admin (collections, homepage, carrousel, produits) restent en 501.
+    // Tous les endpoints admin sont maintenant implémentés (orders, collections, homepage, carousel, products)
+    // Seul Google OAuth reste en 501
     $admin = User::factory()->admin()->create();
-    $this->actingAs($admin)->getJson('/api/admin/collections')->assertStatus(501);
-    $this->actingAs($admin)->putJson('/api/admin/homepage')->assertStatus(501);
-    $this->actingAs($admin)->getJson('/api/admin/carousel')->assertStatus(501);
-    $this->actingAs($admin)->getJson('/api/admin/products')->assertStatus(501);
+    $this->actingAs($admin)->getJson('/api/admin/orders')->assertOk();
+    $this->actingAs($admin)->getJson('/api/admin/collections')->assertOk();
+    $this->actingAs($admin)->getJson('/api/admin/carousel')->assertOk();
+    $this->actingAs($admin)->getJson('/api/admin/products')->assertOk();
 }
 }

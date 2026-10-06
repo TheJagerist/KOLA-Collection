@@ -3,29 +3,49 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\CollectionResource;
+use App\Models\Collection;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
-/**
- * TODO (Manu) — Collections. Spécification : docs/API.md §6.
- * Brique prête : Collection::activate() (transaction + index unique « une seule active »).
- */
 class CollectionController extends Controller
 {
-    /** GET /api/admin/collections — toutes, triées par created_at → CollectionResource::collection */
     public function index()
     {
-        $this->todo('liste des collections');
+        $collections = Collection::query()->oldest()->get();
+
+        return CollectionResource::collection($collections);
     }
 
-    /** POST /api/admin/collections { name } — slug = Str::slug(name), unique ; is_active = false ; 201 */
     public function store(Request $request)
     {
-        $this->todo('création de collection');
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+        ]);
+
+        $slug = Str::slug($data['name']);
+
+        $request->validate([
+            'name' => [
+                \Illuminate\Validation\Rule::unique('collections', 'slug')->where(
+                    fn ($q) => $q->where('slug', $slug)
+                ),
+            ],
+        ]);
+
+        $collection = Collection::create([
+            'name' => $data['name'],
+            'slug' => $slug,
+            'is_active' => false,
+        ]);
+
+        return new CollectionResource($collection);
     }
 
-    /** POST /api/admin/collections/{collection}/activate — $collection->activate() → CollectionResource */
-    public function activate(int $collection)
+    public function activate(Collection $collection)
     {
-        $this->todo('activation de collection');
+        $collection->activate();
+
+        return new CollectionResource($collection->fresh());
     }
 }

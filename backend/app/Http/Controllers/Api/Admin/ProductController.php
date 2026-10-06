@@ -2,48 +2,150 @@
 
 namespace App\Http\Controllers\Api\Admin;
 
+use App\Enums\Category;
+use App\Enums\Ensemble;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ProductResource;
+use App\Models\Collection;
+use App\Models\Product;
+use App\Support\Media;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
-/**
- * TODO (Manu) — CRUD produits de la collection active. Spécification : docs/API.md §6.
- * Le front envoie du multipart : name, price, ensemble, cat, sizes[], niveaux[], description,
- * construction[], badge, image (fichier), sketch (fichier). Mise à jour en POST + _method=PUT.
- * Briques prêtes : Media::store('products' | 'sketches'), ProductResource, contrainte FK restrict sur order_items.
- */
 class ProductController extends Controller
 {
-    /** GET /api/admin/products — tous les produits de la collection active, archivés compris */
     public function index()
     {
-        $this->todo('liste des produits (admin)');
+        $active = Collection::active();
+
+        if (! $active) {
+            return ProductResource::collection(collect());
+        }
+
+        $products = $active->products()->orderBy('order_count', 'desc')->get();
+
+        return ProductResource::collection($products);
     }
 
-    /** POST /api/admin/products — slug unique généré depuis le nom ; 201 + ProductResource */
     public function store(Request $request)
     {
-        $this->todo("création d'un produit");
+        $active = Collection::active();
+
+        if (! $active) {
+            return response()->json(['message' => 'Aucune collection active.'], 409);
+        }
+
+        $data = $request->validate([
+            'name'          => ['required', 'string', 'max:255'],
+            'price'         => ['required', 'integer', 'min:0'],
+            'ensemble'      => ['required', Rule::enum(Ensemble::class)],
+            'cat'           => ['required', Rule::enum(Category::class)],
+            'sizes'         => ['nullable', 'array'],
+            'sizes.*'       => ['string'],
+            'niveaux'       => ['nullable', 'array'],
+            'niveaux.*'     => ['string'],
+            'description'   => ['nullable', 'string'],
+            'construction'  => ['nullable', 'array'],
+            'construction.*'=> ['string'],
+            'badge'         => ['nullable', 'string', 'max:100'],
+            'image'         => ['nullable', 'image', 'max:10240'],
+            'sketch'        => ['nullable', 'image', 'max:10240'],
+        ]);
+
+        $slug = $this->uniqueSlug($data['name']);
+
+        $product = Product::create([
+            'collection_id' => $active->id,
+            'slug'          => $slug,
+            'name'          => $data['name'],
+            'price'         => $data['price'],
+            'ensemble'      => $data['ensemble'],
+            'cat'           => $data['cat'],
+            'sizes'         => $data['sizes'] ?? [],
+            'niveaux'       => $data['niveaux'] ?? [],
+            'description'   => $data['description'] ?? null,
+            'construction'  => $data['construction'] ?? [],
+            'badge'         => $data['badge'] ?? null,
+            'image_path'    => $request->hasFile('image')
+                ? Media::store($request->file('image'), 'products')
+                : null,
+            'sketch_path'   => $request->hasFile('sketch')
+                ? Media::store($request->file('sketch'), 'products/sketches')
+                : null,
+        ]);
+
+        return new ProductResource($product);
     }
 
-    /** PUT /api/admin/products/{product} — mise à jour partielle ; remplacer les images si fournies (supprimer l'ancien fichier) */
-    public function update(Request $request, int $product)
+    public function update(Request $request, Product $product)
     {
-        $this->todo("modification d'un produit");
+        $data = $request->validate([
+            'name'          => ['sometimes', 'string', 'max:255'],
+            'price'         => ['sometimes', 'integer', 'min:0'],
+            'ensemble'      => ['sometimes', Rule::enum(Ensemble::class)],
+            'cat'           => ['sometimes', Rule::enum(Category::class)],
+            'sizes'         => ['sometimes', 'array'],
+            'sizes.*'       => ['string'],
+            'niveaux'       => ['sometimes', 'array'],
+            'niveaux.*'     => ['string'],
+            'description'   => ['sometimes', 'nullable', 'string'],
+            'construction'  => ['sometimes', 'array'],
+            'construction.*'=> ['string'],
+            'badge'         => ['sometimes', 'nullable', 'string', 'max:100'],
+            'image'         => ['sometimes', 'image', 'max:10240'],
+            'sketch'        => ['sometimes', 'image', 'max:10240'],
+        ]);
+
+        if ($request->hasFile('image')) {
+            Media::delete($product->image_path);
+            $data['image_path'] = Media::store($request->file('image'), 'products');
+            unset($data['image']);
+        }
+
+        if ($request->hasFile('sketch')) {
+            Media::delete($product->sketch_path);
+            $data['sketch_path'] = Media::store($request->file('sketch'), 'products/sketches');
+            unset($data['sketch']);
+        }
+
+        $product->update($data);
+
+        return new ProductResource($product->fresh());
     }
 
-    /**
-     * DELETE /api/admin/products/{product}
-     * - si le produit a des order_items → is_archived = true, retour { archived: true }
-     * - sinon suppression réelle (+ fichiers), retour { archived: false }
-     */
-    public function destroy(int $product)
+    public function destroy(Product $product)
     {
-        $this->todo("suppression d'un produit");
+        if ($product->orderItems()->exists()) {
+            $product->update(['is_archived' => true]);
+
+            return response()->json(['archived' => true]);
+        }
+
+        Media::delete($product->image_path);
+        Media::delete($product->sketch_path);
+        $product->delete();
+
+        return response()->json(['archived' => false]);
     }
 
-    /** POST /api/admin/products/{product}/restore — is_archived = false → ProductResource */
-    public function restore(int $product)
+    public function restore(Product $product)
     {
-        $this->todo("réactivation d'un produit");
+        $product->update(['is_archived' => false]);
+
+        return new ProductResource($product->fresh());
+    }
+
+    private function uniqueSlug(string $name): string
+    {
+        $base = Str::slug($name);
+        $slug = $base;
+        $i = 1;
+
+        while (Product::where('slug', $slug)->exists()) {
+            $slug = $base.'-'.$i++;
+        }
+
+        return $slug;
     }
 }
