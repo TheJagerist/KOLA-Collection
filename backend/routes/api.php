@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\StorefrontController;
 use Illuminate\Support\Facades\Route;
 
+
 /*
 |--------------------------------------------------------------------------
 | API Kōlā — préfixe /api
@@ -15,6 +16,7 @@ use Illuminate\Support\Facades\Route;
 | Contrat complet : docs/API.md (à la racine du dépôt).
 | ✅ = implémenté et testé   🚧 = squelette à compléter (renvoie 501)
 */
+
 
 Route::get('/health', fn () => response()->json([
     'status' => 'ok',
@@ -31,8 +33,8 @@ Route::get('/products/{idOrSlug}', [ProductController::class, 'show']);
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');   // ✅
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');         // ✅
-    Route::get('/google/redirect', [GoogleAuthController::class, 'redirect']);                     // 🚧
-    Route::get('/google/callback', [GoogleAuthController::class, 'callback']);                     // 🚧
+    Route::get('/google/redirect', [GoogleAuthController::class, 'redirect']);                     // ✅
+    Route::get('/google/callback', [GoogleAuthController::class, 'callback']);                     // ✅
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);                                 // ✅

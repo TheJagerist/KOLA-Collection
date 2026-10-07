@@ -61,20 +61,19 @@ class AuthTest extends TestCase
         $this->withToken($token)->getJson('/api/auth/me')->assertUnauthorized();
     }
 
-    public function test_google_and_admin_endpoints_not_yet_implemented_return_501_or_403(): void
-{
-    $this->getJson('/api/auth/google/redirect')->assertStatus(501);
+    public function test_google_redirect_and_admin_access(): void
+    {
+        $this->get('/api/auth/google/redirect')->assertRedirect();
 
-    // Un client ne peut pas accéder à l'admin
-    $client = User::factory()->create();
-    $this->actingAs($client)->getJson('/api/admin/orders')->assertForbidden();
+        // Un client ne peut pas accéder à l'admin
+        $client = User::factory()->create();
+        $this->actingAs($client)->getJson('/api/admin/orders')->assertForbidden();
 
-    // Tous les endpoints admin sont maintenant implémentés (orders, collections, homepage, carousel, products)
-    // Seul Google OAuth reste en 501
-    $admin = User::factory()->admin()->create();
-    $this->actingAs($admin)->getJson('/api/admin/orders')->assertOk();
-    $this->actingAs($admin)->getJson('/api/admin/collections')->assertOk();
-    $this->actingAs($admin)->getJson('/api/admin/carousel')->assertOk();
-    $this->actingAs($admin)->getJson('/api/admin/products')->assertOk();
-}
+        // Tous les endpoints admin sont implémentés.
+        $admin = User::factory()->admin()->create();
+        $this->actingAs($admin)->getJson('/api/admin/orders')->assertOk();
+        $this->actingAs($admin)->getJson('/api/admin/collections')->assertOk();
+        $this->actingAs($admin)->getJson('/api/admin/carousel')->assertOk();
+        $this->actingAs($admin)->getJson('/api/admin/products')->assertOk();
+    }
 }

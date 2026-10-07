@@ -3,30 +3,98 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Laravel\Socialite\Facades\Socialite;
 
-/**
- * TODO (Manu) — Connexion Google (Laravel Socialite). Spécification : docs/API.md §4.
- *   composer require laravel/socialite
- *   config/services.php → 'google' => [client_id, client_secret, redirect]
- *   .env → GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI=http://localhost:8000/api/auth/google/callback
- */
 class GoogleAuthController extends Controller
 {
-    /** GET /api/auth/google/redirect → Socialite::driver('google')->stateless()->redirect() */
+    /**
+     * Démarre le flux OAuth en redirigeant directement le navigateur vers Google.
+     */
     public function redirect()
     {
-        $this->todo('connexion Google (redirection)');
+        return Socialite::driver('google')
+            ->stateless()
+            ->redirect();
     }
 
     /**
-     * GET /api/auth/google/callback
-     * - retrouver l'utilisateur par google_id puis par email, sinon le créer (role parent, sans mot de passe)
-     * - $token = $user->createToken('web')->plainTextToken
-     * - redirect(config('app.frontend_url').'/auth/callback?token='.$token)
-     * - en cas d'erreur : redirect(.../auth/callback?error=Connexion%20Google%20impossible)
+     * Callback Google : création/récupération de l'utilisateur,
+     * puis connexion et redirection vers le frontend.
      */
-    public function callback()
+    public function callback(Request $request): RedirectResponse
     {
-        $this->todo('connexion Google (retour)');
+        if (! $request->has('code')) {
+            return $this->redirectToFrontend('/auth/callback?error=google_missing_code');
+        }
+
+        try {
+            $googleUser = Socialite::driver('google')
+                ->stateless()
+                ->user();
+        } catch (\Throwable $e) {
+            report($e);
+            return $this->redirectToFrontend('/auth/callback?error=google_auth_failed');
+        }
+
+        $email = $googleUser->getEmail();
+
+        if (! $email) {
+            return $this->redirectToFrontend('/auth/callback?error=google_email_missing');
+        }
+
+        $user = User::where('email', $email)->first();
+
+        if ($user) {
+            // Utilisateur existant : on lie son compte Google
+            $user->forceFill([
+                'google_id' => $googleUser->getId(),
+                'avatar' => $googleUser->getAvatar() ?: $user->avatar,
+                'email_verified_at' => $user->email_verified_at ?? now(),
+            ])->save();
+        } else {
+            // Nouvel utilisateur Google
+
+            // 1. Génération d'un username unique à partir de l'email
+            $baseUsername = Str::slug(explode('@', $email)[0], '_');
+            $username = $baseUsername;
+            $counter = 1;
+            while (User::where('username', $username)->exists()) {
+                $username = $baseUsername . '_' . $counter;
+                $counter++;
+            }
+
+            // 2. Création de l'utilisateur avec full_name et username
+            $user = new User();
+            $user->forceFill([
+                'full_name' => $googleUser->getName() ?: 'Utilisateur Google',
+                'username' => $username,
+                'email' => $email,
+                'google_id' => $googleUser->getId(),
+                'avatar' => $googleUser->getAvatar(),
+                'password' => Hash::make(Str::random(40)), // Mot de passe aléatoire (inutilisable)
+                'email_verified_at' => now(),
+                'role' => 'parent', // Par défaut : parent (achète les uniformes)
+                'is_admin' => false,
+            ])->save();
+        }
+
+        // Création du token Sanctum
+        $token = $user->createToken('google')->plainTextToken;
+
+        return $this->redirectToFrontend('/auth/callback?token=' . urlencode($token));
+    }
+
+    /**
+     * Redirige vers l'application frontend React.
+     */
+    protected function redirectToFrontend(string $path): RedirectResponse
+    {
+        $frontendUrl = rtrim(config('app.frontend_url', 'http://localhost:5173'), '/');
+        return redirect()->away($frontendUrl . $path);
     }
 }
