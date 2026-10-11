@@ -7,6 +7,7 @@ use App\Http\Resources\CollectionResource;
 use App\Models\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class CollectionController extends Controller
 {
@@ -27,7 +28,7 @@ class CollectionController extends Controller
 
         $request->validate([
             'name' => [
-                \Illuminate\Validation\Rule::unique('collections', 'slug')->where(
+                Rule::unique('collections', 'slug')->where(
                     fn ($q) => $q->where('slug', $slug)
                 ),
             ],

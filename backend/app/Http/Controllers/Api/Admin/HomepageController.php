@@ -21,9 +21,9 @@ class HomepageController extends Controller
         }
 
         $data = $request->validate([
-            'hero_eyebrow'      => ['nullable', 'string', 'max:255'],
-            'hero_title'        => ['required', 'string', 'max:255'],
-            'hero_lede'         => ['nullable', 'string'],
+            'hero_eyebrow' => ['nullable', 'string', 'max:255'],
+            'hero_title' => ['required', 'string', 'max:255'],
+            'hero_lede' => ['nullable', 'string'],
             'cta_primary_label' => ['nullable', 'string', 'max:100'],
         ]);
 

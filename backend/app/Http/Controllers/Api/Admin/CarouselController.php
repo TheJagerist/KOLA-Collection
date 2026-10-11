@@ -35,7 +35,7 @@ class CarouselController extends Controller
         }
 
         $request->validate([
-            'images'   => ['required', 'array', 'min:1'],
+            'images' => ['required', 'array', 'min:1'],
             'images.*' => ['image', 'max:10240'],
         ]);
 
@@ -45,8 +45,8 @@ class CarouselController extends Controller
             $path = Media::store($file, 'carousel');
             CarouselImage::create([
                 'collection_id' => $active->id,
-                'path'          => $path,
-                'position'      => ++$maxPosition,
+                'path' => $path,
+                'position' => ++$maxPosition,
             ]);
         }
 
@@ -68,7 +68,7 @@ class CarouselController extends Controller
         $active = Collection::active();
 
         $data = $request->validate([
-            'ids'   => ['required', 'array'],
+            'ids' => ['required', 'array'],
             'ids.*' => ['integer'],
         ]);
 
