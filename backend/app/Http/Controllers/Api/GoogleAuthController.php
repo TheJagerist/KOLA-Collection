@@ -38,6 +38,7 @@ class GoogleAuthController extends Controller
                 ->user();
         } catch (\Throwable $e) {
             report($e);
+
             return $this->redirectToFrontend('/auth/callback?error=google_auth_failed');
         }
 
@@ -64,12 +65,12 @@ class GoogleAuthController extends Controller
             $username = $baseUsername;
             $counter = 1;
             while (User::where('username', $username)->exists()) {
-                $username = $baseUsername . '_' . $counter;
+                $username = $baseUsername.'_'.$counter;
                 $counter++;
             }
 
             // 2. Création de l'utilisateur avec full_name et username
-            $user = new User();
+            $user = new User;
             $user->forceFill([
                 'full_name' => $googleUser->getName() ?: 'Utilisateur Google',
                 'username' => $username,
@@ -86,7 +87,7 @@ class GoogleAuthController extends Controller
         // Création du token Sanctum
         $token = $user->createToken('google')->plainTextToken;
 
-        return $this->redirectToFrontend('/auth/callback?token=' . urlencode($token));
+        return $this->redirectToFrontend('/auth/callback?token='.urlencode($token));
     }
 
     /**
@@ -95,6 +96,7 @@ class GoogleAuthController extends Controller
     protected function redirectToFrontend(string $path): RedirectResponse
     {
         $frontendUrl = rtrim(config('app.frontend_url', 'http://localhost:5173'), '/');
-        return redirect()->away($frontendUrl . $path);
+
+        return redirect()->away($frontendUrl.$path);
     }
 }

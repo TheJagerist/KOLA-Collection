@@ -8,7 +8,6 @@ use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\StorefrontController;
 use Illuminate\Support\Facades\Route;
 
-
 /*
 |--------------------------------------------------------------------------
 | API Kōlā — préfixe /api
@@ -16,7 +15,6 @@ use Illuminate\Support\Facades\Route;
 | Contrat complet : docs/API.md (à la racine du dépôt).
 | ✅ = implémenté et testé   🚧 = squelette à compléter (renvoie 501)
 */
-
 
 Route::get('/health', fn () => response()->json([
     'status' => 'ok',

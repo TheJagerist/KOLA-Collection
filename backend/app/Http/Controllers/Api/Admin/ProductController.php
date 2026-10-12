@@ -37,40 +37,40 @@ class ProductController extends Controller
         }
 
         $data = $request->validate([
-            'name'          => ['required', 'string', 'max:255'],
-            'price'         => ['required', 'integer', 'min:0'],
-            'ensemble'      => ['required', Rule::enum(Ensemble::class)],
-            'cat'           => ['required', Rule::enum(Category::class)],
-            'sizes'         => ['nullable', 'array'],
-            'sizes.*'       => ['string'],
-            'niveaux'       => ['nullable', 'array'],
-            'niveaux.*'     => ['string'],
-            'description'   => ['nullable', 'string'],
-            'construction'  => ['nullable', 'array'],
-            'construction.*'=> ['string'],
-            'badge'         => ['nullable', 'string', 'max:100'],
-            'image'         => ['nullable', 'image', 'max:10240'],
-            'sketch'        => ['nullable', 'image', 'max:10240'],
+            'name' => ['required', 'string', 'max:255'],
+            'price' => ['required', 'integer', 'min:0'],
+            'ensemble' => ['required', Rule::enum(Ensemble::class)],
+            'cat' => ['required', Rule::enum(Category::class)],
+            'sizes' => ['nullable', 'array'],
+            'sizes.*' => ['string'],
+            'niveaux' => ['nullable', 'array'],
+            'niveaux.*' => ['string'],
+            'description' => ['nullable', 'string'],
+            'construction' => ['nullable', 'array'],
+            'construction.*' => ['string'],
+            'badge' => ['nullable', 'string', 'max:100'],
+            'image' => ['nullable', 'image', 'max:10240'],
+            'sketch' => ['nullable', 'image', 'max:10240'],
         ]);
 
         $slug = $this->uniqueSlug($data['name']);
 
         $product = Product::create([
             'collection_id' => $active->id,
-            'slug'          => $slug,
-            'name'          => $data['name'],
-            'price'         => $data['price'],
-            'ensemble'      => $data['ensemble'],
-            'cat'           => $data['cat'],
-            'sizes'         => $data['sizes'] ?? [],
-            'niveaux'       => $data['niveaux'] ?? [],
-            'description'   => $data['description'] ?? null,
-            'construction'  => $data['construction'] ?? [],
-            'badge'         => $data['badge'] ?? null,
-            'image_path'    => $request->hasFile('image')
+            'slug' => $slug,
+            'name' => $data['name'],
+            'price' => $data['price'],
+            'ensemble' => $data['ensemble'],
+            'cat' => $data['cat'],
+            'sizes' => $data['sizes'] ?? [],
+            'niveaux' => $data['niveaux'] ?? [],
+            'description' => $data['description'] ?? null,
+            'construction' => $data['construction'] ?? [],
+            'badge' => $data['badge'] ?? null,
+            'image_path' => $request->hasFile('image')
                 ? Media::store($request->file('image'), 'products')
                 : null,
-            'sketch_path'   => $request->hasFile('sketch')
+            'sketch_path' => $request->hasFile('sketch')
                 ? Media::store($request->file('sketch'), 'products/sketches')
                 : null,
         ]);
@@ -81,20 +81,20 @@ class ProductController extends Controller
     public function update(Request $request, Product $product)
     {
         $data = $request->validate([
-            'name'          => ['sometimes', 'string', 'max:255'],
-            'price'         => ['sometimes', 'integer', 'min:0'],
-            'ensemble'      => ['sometimes', Rule::enum(Ensemble::class)],
-            'cat'           => ['sometimes', Rule::enum(Category::class)],
-            'sizes'         => ['sometimes', 'array'],
-            'sizes.*'       => ['string'],
-            'niveaux'       => ['sometimes', 'array'],
-            'niveaux.*'     => ['string'],
-            'description'   => ['sometimes', 'nullable', 'string'],
-            'construction'  => ['sometimes', 'array'],
-            'construction.*'=> ['string'],
-            'badge'         => ['sometimes', 'nullable', 'string', 'max:100'],
-            'image'         => ['sometimes', 'image', 'max:10240'],
-            'sketch'        => ['sometimes', 'image', 'max:10240'],
+            'name' => ['sometimes', 'string', 'max:255'],
+            'price' => ['sometimes', 'integer', 'min:0'],
+            'ensemble' => ['sometimes', Rule::enum(Ensemble::class)],
+            'cat' => ['sometimes', Rule::enum(Category::class)],
+            'sizes' => ['sometimes', 'array'],
+            'sizes.*' => ['string'],
+            'niveaux' => ['sometimes', 'array'],
+            'niveaux.*' => ['string'],
+            'description' => ['sometimes', 'nullable', 'string'],
+            'construction' => ['sometimes', 'array'],
+            'construction.*' => ['string'],
+            'badge' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'image' => ['sometimes', 'image', 'max:10240'],
+            'sketch' => ['sometimes', 'image', 'max:10240'],
         ]);
 
         if ($request->hasFile('image')) {
