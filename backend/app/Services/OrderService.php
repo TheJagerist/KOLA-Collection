@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\OrderStatus;
+use App\Events\OrderPlaced;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
@@ -83,10 +84,13 @@ class OrderService
                 Product::query()->whereKey($line['product_id'])->increment('order_count', $line['qty']);
             }
 
-            // TODO (Manu) : déclencher ici la notification « nouvelle commande » (e-mail / WhatsApp Business)
-            // event(new \App\Events\OrderPlaced($order));
+            $order->load('items.product', 'user');
 
-            return $order->load('items.product', 'user');
+            // Notification « nouvelle commande » : OrderPlaced est diffusé seulement après le commit
+            // (ShouldDispatchAfterCommit), donc jamais si la transaction est annulée.
+            OrderPlaced::dispatch($order);
+
+            return $order;
         });
     }
 }

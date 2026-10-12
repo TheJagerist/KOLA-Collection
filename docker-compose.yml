@@ -46,6 +46,33 @@ services:
     volumes:
       - ./backend:/var/www/html
 
+  # Worker de la file d'attente : envoie les e-mails / notifications en arrière-plan.
+  # Il garde le code en mémoire : après une modification de notification ou de listener,
+  #   docker compose restart queue
+  queue:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    restart: unless-stopped
+    command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started
+    environment:
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-kola}
+      DB_USERNAME: ${DB_USERNAME:-kola}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      # Seul le service api migre et remplit la base
+      KOLA_AUTO_MIGRATE: "false"
+      KOLA_AUTO_SEED: "false"
+    volumes:
+      - ./backend:/var/www/html
+
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped

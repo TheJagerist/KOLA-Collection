@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use App\Events\OrderStatusChanged;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -74,13 +75,20 @@ class Order extends Model
     /**
      * Change le statut en appliquant les règles métier :
      * « livre » = solde encaissé ; tout autre statut remet ces champs à zéro.
+     * Si le statut change réellement, l'événement OrderStatusChanged prévient le client.
      */
     public function transitionTo(OrderStatus $status): void
     {
+        $previous = $this->status;
+
         $this->status = $status;
         $this->balance_paid = $status === OrderStatus::Livre;
         $this->delivered_at = $status === OrderStatus::Livre ? now() : null;
         $this->save();
+
+        if ($previous !== $status) {
+            OrderStatusChanged::dispatch($this, $previous, $status);
+        }
     }
 
     public function scopeReference($q, string $ref)
