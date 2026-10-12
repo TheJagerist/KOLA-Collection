@@ -76,6 +76,7 @@ Route::get('/payments/config', [PaymentController::class, 'config']);
 Route::post('/payments/cinetpay/notify', [PaymentController::class, 'cinetpayNotify']); // appel serveur CinetPay
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/orders/{reference}/pay', [PaymentController::class, 'start']);
+    Route::post('/orders/{reference}/payment-claim', [PaymentController::class, 'claim'])->middleware('throttle:10,1');
     Route::get('/payments/{transaction}', [PaymentController::class, 'show']);
     Route::post('/payments/fake/{transaction}', [PaymentController::class, 'fakeComplete']); // simulateur (dev)
 });
@@ -124,6 +125,10 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'admin'])->group(function ()
         Route::delete('/products/{product}', [Admin\ProductController::class, 'destroy']);
         Route::post('/products/{product}/restore', [Admin\ProductController::class, 'restore']);
         Route::put('/products/{product}/stock', [Admin\StockController::class, 'update']);
+
+        Route::get('/settings', [Admin\SettingsController::class, 'show']);
+        Route::put('/settings', [Admin\SettingsController::class, 'update']);
+        Route::post('/settings/whatsapp-test', [Admin\SettingsController::class, 'testWhatsApp'])->middleware('throttle:5,1');
 
         Route::get('/promos', [Admin\PromoController::class, 'index']);
         Route::post('/promos', [Admin\PromoController::class, 'store']);

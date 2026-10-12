@@ -23,6 +23,7 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
+        <env name="KOLA_WHATSAPP_ALERTS" value="log"/>
         <!-- force : les tests utilisent TOUJOURS SQLite en mémoire, jamais la base de dev (RefreshDatabase l'effacerait) -->
         <server name="DB_CONNECTION" value="sqlite" force="true"/>
         <server name="DB_DATABASE" value=":memory:" force="true"/>

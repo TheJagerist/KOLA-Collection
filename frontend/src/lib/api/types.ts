@@ -141,6 +141,8 @@ export interface Order {
   delivery_date?: string | null; // AAAA-MM-JJ
   delivery_slot?: string | null;
   deposit_paid_at?: string | null;
+  /** Dépôt Mobile Money déclaré par le client, à vérifier par l'équipe */
+  payment_claim?: PaymentClaim | null;
   created_at: string;
   delivered_at: string | null;
 }
@@ -253,6 +255,39 @@ export interface DeliveryInput {
   courier_id: number | null;
   delivery_date: string | null;
   delivery_slot: string | null;
+}
+
+export interface PaymentClaim {
+  kind: 'deposit' | 'balance';
+  amount: number;
+  operator: PaymentMethod;
+  payer_phone: string;
+  transaction_ref: string | null;
+  at: string;
+}
+
+export interface MobileMoneyAccount {
+  number: string;
+  name: string;
+  /** Code USSD du menu Mobile Money (ex. *105#) */
+  ussd: string;
+  /** Frais de transfert estimés, en % du montant (à la charge du client) */
+  fee_percent: number;
+}
+
+/** GET /api/payments/config */
+export interface PaymentConfig {
+  /** Paiement en ligne automatique (CinetPay) disponible */
+  enabled: boolean;
+  driver: string | null;
+  /** Dépôt manuel : numéros sur lesquels envoyer l'acompte */
+  manual?: { mtn: MobileMoneyAccount; airtel: MobileMoneyAccount; note: string; whatsapp: string | null };
+}
+
+/** Admin → Paramètres */
+export interface ShopSettings {
+  payment: { mtn: MobileMoneyAccount; airtel: MobileMoneyAccount; note: string };
+  whatsapp: { shop_number: string; alerts: { name?: string; phone: string; apikey: string }[] };
 }
 
 export interface PaymentInfo {
@@ -401,7 +436,9 @@ export interface KolaApi {
 
   // Paiement Mobile Money en ligne
   payments: {
-    config(): Promise<{ enabled: boolean; driver: string | null }>;
+    config(): Promise<PaymentConfig>;
+    /** Le client déclare avoir envoyé l'acompte (ou le solde) par Mobile Money */
+    claim(reference: string, input: { operator: PaymentMethod; payer_phone: string; transaction_ref?: string | null }): Promise<Order>;
     start(reference: string, kind?: 'deposit' | 'balance'): Promise<{ transaction_id: string; amount: number; url: string }>;
     status(transactionId: string): Promise<PaymentInfo>;
     fakeComplete(transactionId: string, success: boolean): Promise<PaymentInfo>;
@@ -453,5 +490,9 @@ export interface KolaApi {
     createPromo(input: PromoInput): Promise<Promo>;
     updatePromo(id: number, input: PromoInput): Promise<Promo>;
     deletePromo(id: number): Promise<void>;
+
+    settings(): Promise<ShopSettings>;
+    updateSettings(input: Partial<ShopSettings>): Promise<ShopSettings>;
+    testWhatsApp(): Promise<{ sent: boolean }>;
   };
 }

@@ -3,21 +3,16 @@
 Salut Manu ! Ce document résume **ce qui est déjà en place côté backend**, **comment lancer le projet** et **ce qu'il te reste à faire**.
 Le frontend (React) est géré par Mulho ; le contrat entre nous deux est dans [`docs/API.md`](docs/API.md).
 
-> TL;DR
+> **TL;DR**
 > ```bash
-> docker compose up -d --build      # tout démarre, la base se remplit toute seule
-> docker compose exec api php artisan test   # 17 tests au vert
+> git pull
+> docker compose up -d --build
+> docker compose exec api composer install          # nouvelles dépendances PHP (ex. lbuchs/webauthn)
+> docker compose exec api php artisan migrate
+> docker compose exec api php artisan db:seed --class=DemoSeeder   # comptes de démo de l'équipe
 > ```
 > Front : http://localhost:5173 · API : http://localhost:8000/api/health · Admin : `admin` / `admin1234`
-
-## 🔐 Se connecter à l'administration
-
-* Nom d'utilisateur : `admin`
-* Mot de passe : `admin1234`
-
-Connecte-toi sur http://localhost:5173/connexion, tu arrives ensuite directement sur le tableau de bord admin.
-
-> Ces identifiants sont créés par `AdminSeeder` (modifiables via `ADMIN_USERNAME` / `ADMIN_PASSWORD` dans `backend/.env`). **À changer avant la mise en production.**
+> Tous les comptes sont dans la section [🔐 Identifiants](#-identifiants).
 
 ---
 
@@ -36,49 +31,111 @@ Un back-office permet de gérer commandes, produits, collections et page d'accue
 
 ---
 
-## 2. Lancer le projet
+## 2. Lancer l'application
 
 ### Prérequis
-- **Docker Desktop** (Windows / macOS) ou Docker Engine + Compose v2 (Linux)
-- Git. Rien d'autre : PHP, Composer, Node et Postgres tournent dans les conteneurs.
+- **Docker Desktop** (Windows / macOS) ou Docker Engine + Compose v2 (Linux), **démarré**.
+- **Git**. C'est tout : PHP, Composer, Node et Postgres tournent dans les conteneurs.
 
-### Premier lancement
+### A. Tu n'as pas encore le projet (premier lancement)
 ```bash
 git clone https://github.com/TheJagerist/KOLA-Collection.git
 cd KOLA-Collection
+git checkout refonte-react-laravel        # ⚠️ branche principale du projet (pas main)
 docker compose up -d --build
+docker compose logs -f api                # attendre « ready to handle connections », puis Ctrl+C
 ```
-Au premier démarrage, le conteneur `api` fait automatiquement (voir `docker/php/entrypoint.sh`) :
+Au premier démarrage, le conteneur `api` fait tout seul (`docker/php/entrypoint.sh`) :
 1. copie `backend/.env.example` → `backend/.env` si absent ;
 2. `composer install` si `vendor/` est absent ;
 3. `php artisan key:generate` ;
 4. attend Postgres puis `php artisan migrate` ;
 5. `php artisan storage:link` ;
-6. `php artisan kola:seed-if-empty` → remplit la base **uniquement si elle est vide**.
+6. `php artisan kola:seed-if-empty` → remplit la base (catalogue, admin, comptes de démo) **uniquement si elle est vide**.
 
-Compte 2–4 minutes la première fois. Suivre l'avancement : `docker compose logs -f api`.
+Compte 2 à 4 minutes la première fois.
 
-| Service | URL / port | Rôle |
+### B. Tu as déjà le projet (mise à jour après un `git pull`)
+L'entrypoint ne relance **pas** `composer install` si `vendor/` existe déjà et ne re-seed pas une base remplie. Après chaque `git pull` :
+```bash
+git checkout refonte-react-laravel
+git pull
+docker compose up -d --build
+docker compose exec api composer install                       # si composer.json a changé
+docker compose exec api php artisan migrate                    # nouvelles tables / colonnes
+docker compose exec api php artisan optimize:clear             # vide les caches (config, routes…)
+docker compose exec api php artisan db:seed --class=DemoSeeder # (re)crée les comptes de démo, sans doublon
+docker compose restart frontend                                # si package.json a changé
+```
+
+### C. Vérifier que tout tourne
+| Service | URL / port | À quoi ça sert |
 |---|---|---|
-| Front | http://localhost:5173 | Vite, proxy `/api` et `/storage` vers Nginx |
-| API | http://localhost:8000 | Nginx → PHP-FPM |
-| Postgres | `localhost:5433` — base `kola`, user `kola`, mdp `secret` | pour DBeaver / TablePlus |
+| Site (front) | http://localhost:5173 | boutique + back-office (`/admin`) |
+| API | http://localhost:8000/api/health | doit répondre `"status": "ok"` |
+| Postgres | `localhost:5433` | pour DBeaver / TablePlus (identifiants ci-dessous) |
 | Adminer (optionnel) | http://localhost:8080 | `docker compose --profile tools up -d` |
 
-### Comptes de départ (seeders)
-| Rôle | Identifiant | Mot de passe |
-|---|---|---|
-| Admin | `admin` | `admin1234` (modifiable via `ADMIN_USERNAME` / `ADMIN_PASSWORD` dans `backend/.env`) |
-| Client démo | `nathalie242` | `kola1234` (créé seulement hors production) |
+`docker compose ps` doit montrer `db`, `api`, `nginx` et `frontend` en **Up**.
 
-### Brancher le front sur ton API
-Par défaut le front tourne en **mode démo** (`VITE_API_MODE=mock`, données simulées dans le navigateur). Pour qu'il appelle ton API :
-```bash
-cp .env.example .env          # à la racine du dépôt
-# VITE_API_MODE=http est maintenant la valeur par défaut (mock = démo sans backend)
-docker compose up -d frontend
-```
-👉 En mode `http` (par défaut), **tout le site fonctionne sur la vraie base** : parcours client, profil, et tout le back-office (commandes, catalogue avec images, vitrine, carrousel, collections). Seule la connexion Google renvoie encore 501 (§5).
+### D. Mode du front (démo ou vraie API)
+`VITE_API_MODE` (fichier `.env` à la racine, copié depuis `.env.example`) :
+- **vide (par défaut)** = auto : le front utilise l'API si elle répond, sinon la démo avec un bandeau d'avertissement ;
+- `http` = toujours l'API Laravel ; `mock` = toujours la démo (données dans le navigateur, sans backend).
+
+Si tu vois le bandeau « mode démo » alors que tu veux l'API : l'API ne répond pas → `docker compose logs -f api`.
+
+---
+
+## 🔐 Identifiants
+
+### Comptes de l'application (dev)
+Connexion sur http://localhost:5173/connexion. On peut se connecter avec **l'identifiant, l'e-mail ou le téléphone**, plus le mot de passe (ou un code reçu, ou l'empreinte).
+
+| Rôle | Identifiant | Mot de passe | Accès |
+|---|---|---|---|
+| **Gérant (admin)** | `admin` | `admin1234` | tout le back-office, Équipe, Paramètres |
+| Préparateur | `prepa` | `kola1234` | commandes, clients, préparation, livraisons |
+| Livreur | `livreur` | `kola1234` | ses livraisons uniquement (tél. `05 555 55 55`) |
+| Client démo | `nathalie242` | `kola1234` | boutique, commandes, profil |
+
+- `admin` vient de `AdminSeeder` (modifiable via `ADMIN_USERNAME` / `ADMIN_PASSWORD` dans `backend/.env`). Les autres viennent de `DemoSeeder` (**hors production seulement**).
+- Si `prepa` / `livreur` / `nathalie242` n'existent pas chez toi (base créée avant), lance `docker compose exec api php artisan db:seed --class=DemoSeeder`.
+- Tu peux créer d'autres membres dans **Admin → Équipe**.
+
+### Base de données (PostgreSQL)
+| Champ | Valeur |
+|---|---|
+| Hôte / port (depuis ton PC) | `localhost` / `5433` |
+| Hôte / port (depuis un conteneur, Adminer) | `db` / `5432` |
+| Base | `kola` |
+| Utilisateur | `kola` |
+| Mot de passe | `secret` |
+
+### Codes de connexion, SMS et e-mails en dev
+Rien n'est envoyé pour de vrai en local :
+- **Code de connexion** : affiché directement sous le champ du code (« Développement : votre code est … », cliquable), et écrit dans `backend/storage/logs/laravel.log`.
+- **SMS** (`KOLA_SMS_DRIVER=log`) et **e-mails** (`MAIL_MAILER=log`) : écrits dans `backend/storage/logs/laravel.log`.
+- **Alertes WhatsApp** de l'équipe : envoyées via CallMeBot seulement si des destinataires sont configurés dans **Admin → Paramètres** (`KOLA_WHATSAPP_ALERTS=log` pour juste les écrire dans le log).
+- **Empreinte / Face ID** : fonctionne uniquement sur `localhost` ou en HTTPS (pas via l'IP du PC).
+
+### Après le premier lancement
+Dans **Admin → Paramètres** (compte `admin`) : renseigner les numéros **MTN MoMo / Airtel Money** qui reçoivent les acomptes, les codes USSD, les frais, le numéro WhatsApp de la boutique et les destinataires des alertes.
+
+> ⚠️ **Avant la production** : changer `admin1234` (`ADMIN_PASSWORD`), `APP_DEBUG=false` (sinon le code de connexion est renvoyé par l'API), mot de passe Postgres réel, et ne pas lancer `DemoSeeder`.
+
+---
+
+## 2 bis. Dépannage rapide
+| Symptôme | Solution |
+|---|---|
+| `Class "lbuchs\WebAuthn\WebAuthn" not found` (ou autre classe introuvable) | `docker compose exec api composer install` puis `composer dump-autoload` |
+| `column … does not exist` / `relation … does not exist` | `docker compose exec api php artisan migrate` |
+| Une modif de `.env` n'est pas prise en compte | `docker compose exec api php artisan optimize:clear` puis `docker compose restart api` |
+| Le conteneur `api` redémarre en boucle avec `bad interpreter` | `entrypoint.sh` en CRLF (Windows) → `git checkout -- docker/` après avoir vérifié `core.autocrlf` |
+| `port is already allocated` (5173, 8000 ou 5433) | changer `FRONT_FORWARD_PORT` / `API_FORWARD_PORT` / `DB_FORWARD_PORT` dans `.env` à la racine |
+| Erreur 500 côté front | lire `backend/storage/logs/laravel.log` ou `docker compose logs -f api` |
+| Tout repartir de zéro (⚠️ efface la base) | `docker compose down -v && docker compose up -d --build` |
 
 ### Commandes utiles
 ```bash
@@ -190,6 +247,8 @@ Si tu dois changer un format de réponse : préviens Mulho et mettez à jour `do
 > - **Rôles** : gérant (tout), préparateur (commandes, clients, préparation, livraisons), livreur (ses livraisons). Comptes de démo : `prepa` / `kola1234`, `livreur` / `kola1234`.
 > - **À faire pour la prod** : compte **CinetPay** (`KOLA_PAYMENT_DRIVER=cinetpay`, `CINETPAY_SITE_ID`, `CINETPAY_API_KEY`), SMTP + `KOLA_NOTIFY_EMAILS` pour les e-mails, et passer les mails en queue.
 
+> **Paiement & WhatsApp (13 oct.)** : par défaut (`KOLA_PAYMENT_DRIVER` vide), l'acompte se paie par **dépôt Mobile Money manuel** : le client voit les numéros MTN/Airtel, le montant, les frais et les étapes (réglés dans **Admin → Paramètres**, table `settings`, `App\Support\Settings`), puis déclare son envoi (`POST /api/orders/{ref}/payment-claim` → `orders.payment_claim`, évènement « payment »). L'équipe est prévenue (tableau de bord + **WhatsApp automatique via CallMeBot**, `App\Services\WhatsApp\WhatsAppAlerts`, aussi pour chaque nouvelle commande) et valide après vérification ; `transitionTo()` efface la déclaration. Migration `2026_10_13_000100_add_settings_and_payment_claims.php`. 50 tests au vert.
+>
 > **Inscription (12 oct., nuit)** : téléphone **obligatoire et unique** à l'inscription, confirmation du mot de passe (`password_confirmation`, règle `confirmed`) à l'inscription et pour les comptes de l'équipe ; un client ne peut plus vider son téléphone dans son profil. Tests adaptés.
 >
 > **Mise à jour (12 oct., soir) — connexion (Mulho)** : connexion par **e-mail / téléphone / identifiant**, **code à usage unique** par e-mail ou SMS (`LoginCodeController`, `LoginCodeService`, `Services/Sms/*`), **empreinte / Face ID** (`PasskeyController`, lib `lbuchs/webauthn`), **e-mails au client** à chaque étape de la commande (`OrderStatusChanged` déclenché par `Order::transitionTo()`, listener `EmailCustomerAboutOrder`). Migration `2026_10_12_000100_add_login_methods.php`. Le message `auth.failed` devient « Identifiant ou mot de passe incorrect. » (ton `AuthTest` est adapté). 47 tests au vert. **Pour la prod** : SMTP (`MAIL_*`), SMS Africa's Talking (`KOLA_SMS_DRIVER=africastalking`, `AT_*`), `KOLA_WEBAUTHN_RP_ID=kolacollection.cg`, et `APP_DEBUG=false` (sinon `dev_code` est renvoyé).
@@ -243,7 +302,7 @@ Si tu dois changer un format de réponse : préviens Mulho et mettez à jour `do
 ---
 
 ## 6. Workflow Git proposé
-- `main` = stable. Une branche par sujet : `feat/admin-orders`, `feat/google-auth`…
+- `refonte-react-laravel` = branche principale (pas `main`). Une branche par sujet : `feat/admin-orders`, `feat/google-auth`…
 - Avant de pousser : `vendor/bin/pint` + `php artisan test`.
 - Une PR par fonctionnalité, Mulho relit si ça touche au contrat d'API.
 

@@ -108,7 +108,10 @@ export function OrderSummary({
   subtotal,
   discount,
   discountLabel,
+  top,
 }: {
+  /** Contenu affiché sous le titre, avant les montants (ex. détail des articles) */
+  top?: React.ReactNode;
   total: number;
   deposit: number;
   balance: number;
@@ -122,6 +125,7 @@ export function OrderSummary({
   return (
     <aside className="h-fit rounded-[28px] bg-brun-900 p-6 text-creme-100 sm:p-7 lg:sticky lg:top-28">
       <h2 className="text-2xl text-creme-50">Récapitulatif</h2>
+      {top}
       <dl className="mt-6 space-y-3 text-[14.5px]">
         <div className="flex justify-between">
           <dt className="text-creme-200/70">

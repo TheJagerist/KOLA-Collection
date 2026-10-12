@@ -283,7 +283,8 @@ POST   /api/orders                            🔒  (+ promo_code)
 GET    /api/orders                            🔒
 GET    /api/orders/{reference}                🔒
 POST   /api/orders/{reference}/pay            🔒  paiement en ligne (kind: deposit|balance)
-GET    /api/payments/config                   { enabled, driver }
+GET    /api/payments/config                   { enabled, driver, manual: { mtn, airtel, note, whatsapp } }
+POST   /api/orders/{reference}/payment-claim  🔒  { operator, payer_phone, transaction_ref? } — dépôt Mobile Money déclaré
 GET    /api/payments/{transaction}            🔒  statut (re-vérifie auprès de l'agrégateur)
 POST   /api/payments/fake/{transaction}       dev uniquement (driver fake)
 POST   /api/payments/cinetpay/notify          webhook CinetPay (statut re-vérifié côté serveur)
@@ -310,6 +311,7 @@ POST/PUT/DELETE /api/admin/products…            ✓    |             |
 /api/admin/collections, homepage, carousel      ✓    |             |
 GET|POST /api/admin/promos, PUT|DELETE /{id}    ✓    |             |
 GET|POST /api/admin/team, PATCH|DELETE /{user}  ✓    |             |
+GET|PUT /api/admin/settings, POST /settings/whatsapp-test ✓ |       |   numéros MoMo, frais, WhatsApp
 ```
 
 ### Connexion (12 oct., soir)

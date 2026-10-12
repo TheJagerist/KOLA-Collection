@@ -85,20 +85,30 @@ function Hero() {
       <motion.div className="absolute inset-0 -z-20" style={{ y: bgY }}>
         <AnimatePresence mode="sync">
           {images[index] && (
-            <motion.img
+            <motion.div
               key={images[index].id}
-              src={images[index].image_url}
-              alt=""
-              initial={{ opacity: 0, scale: 1.12 }}
-              animate={{ opacity: 1, scale: 1 }}
+              className="absolute inset-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ opacity: { duration: 1.4 }, scale: { duration: 7, ease: 'linear' } }}
-              className="absolute inset-0 size-full object-cover"
-            />
+              transition={{ duration: 1.4 }}
+            >
+              {/* Fond : la même photo, floutée, pour remplir l'écran sans zoom visible */}
+              <img src={images[index].image_url} alt="" aria-hidden className="absolute inset-0 size-full scale-110 object-cover opacity-40 blur-3xl max-lg:hidden" />
+              {/* Photo entière : en plein écran sur mobile, à droite et en entier sur ordinateur */}
+              <motion.img
+                src={images[index].image_url}
+                alt=""
+                initial={{ scale: 1.04 }}
+                animate={{ scale: 1 }}
+                transition={{ duration: 6, ease: 'easeOut' }}
+                className="absolute inset-0 size-full object-cover lg:right-0 lg:left-auto lg:h-full lg:w-auto lg:max-w-[70%] lg:object-contain lg:[mask-image:linear-gradient(to_right,transparent,black_28%)]"
+              />
+            </motion.div>
           )}
         </AnimatePresence>
       </motion.div>
-      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-nuit-900 via-nuit-900/85 to-nuit-900/30" />
+      <div className="absolute inset-0 -z-10 bg-gradient-to-r from-nuit-900 via-nuit-900/80 to-nuit-900/30 lg:via-nuit-900/60 lg:to-transparent" />
       <div className="absolute inset-0 -z-10 bg-gradient-to-t from-nuit-900/90 via-transparent to-transparent" />
       <motion.div
         aria-hidden
@@ -172,7 +182,7 @@ function Hero() {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.4, ease: EASE }}
-          className="relative hidden justify-self-end [perspective:1000px] lg:block"
+          className="relative hidden translate-y-24 justify-self-start [perspective:1000px] lg:block xl:-ml-6"
         >
           <motion.div style={{ rotateX: rx, rotateY: ry }} className="relative">
             <div className="animate-float">
@@ -198,13 +208,13 @@ function Hero() {
 
 function UniformCard() {
   return (
-    <div className="glass-dark shine mirror relative w-[380px] rounded-[28px] p-6 text-creme-50">
+    <div className="glass-dark shine mirror relative w-[330px] rounded-[28px] p-5 text-creme-50">
       <div className="flex items-start justify-between">
         <div>
           <div className="font-display text-lg font-semibold">Fiche uniforme</div>
           <div className="text-[13px] text-kaki-200">Collège & lycée — deux ensembles</div>
         </div>
-        <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold">6ème · Taille 12</span>
+        <span className="shrink-0 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold whitespace-nowrap">6ème · Taille 12</span>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3">
         <Swatch className="bg-gradient-to-br from-kaki-300 to-kaki-400" title="Garçon" sub="Chemise + pantalon kaki" />

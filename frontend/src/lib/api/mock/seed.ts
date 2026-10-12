@@ -1,4 +1,5 @@
-import type { CarouselImage, Collection, HomepageContent, Order, OrderEvent, OrderStatus, PaymentInfo, Product, Promo, StaffRole, User } from '../types';
+import type {
+  ShopSettings, CarouselImage, Collection, HomepageContent, Order, OrderEvent, OrderStatus, PaymentInfo, Product, Promo, StaffRole, User } from '../types';
 
 /**
  * Données initiales du mock — reprises de la base Supabase de l'ancien site
@@ -23,6 +24,8 @@ export interface MockDb {
   orders: (Order & { user_id: number })[];
   events: (OrderEvent & { order_id: number })[];
   promos: Promo[];
+  /** Admin → Paramètres (démo) */
+  settings?: ShopSettings;
   payments: (PaymentInfo & { order_id: number })[];
   seq: { user: number; collection: number; product: number; order: number; carousel: number; event: number; promo: number };
 }

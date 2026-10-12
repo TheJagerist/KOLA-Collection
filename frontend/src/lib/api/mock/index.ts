@@ -5,7 +5,7 @@
  * pour que le frontend soit utilisable avant que l'API soit prête.
  * L'état est conservé dans le localStorage du navigateur.
  */
-import { ApiError, type AuthResponse, type Category, type CreateOrderPayload, type CustomerSummary, type KolaApi, type Order, type OrderEvent, type OrderStatus, type PaymentInfo, type Product, type ProductInput, type Promo, type StaffMember, type StaffRole, type User } from '../types';
+import { ApiError, type AuthResponse, type Category, type CreateOrderPayload, type CustomerSummary, type KolaApi, type Order, type OrderEvent, type OrderStatus, type PaymentInfo, type Product, type ProductInput, type Promo, type ShopSettings, type StaffMember, type StaffRole, type User } from '../types';
 import { getToken } from '../token';
 import { createSeed, SEED_VERSION, type MockDb, type MockUser } from './seed';
 
@@ -117,6 +117,20 @@ function fileToDataUrl(file: File): Promise<string> {
 }
 
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/;
+
+/** Réglages de démo (numéros fictifs) */
+function settingsOf(db: MockDb): ShopSettings {
+  return (
+    db.settings ?? {
+      payment: {
+        mtn: { number: '064445566', name: 'Kōlā Collection', ussd: '*105#', fee_percent: 1 },
+        airtel: { number: '054445566', name: 'Kōlā Collection', ussd: '*128#', fee_percent: 1 },
+        note: 'Les frais de transfert sont à votre charge : envoyez le montant exact de l’acompte. Nous vérifions la réception et validons votre commande rapidement.',
+      },
+      whatsapp: { shop_number: '242064455563', alerts: [] },
+    }
+  );
+}
 
 /** Identifiant de connexion : nom d'utilisateur, e-mail ou téléphone */
 function parseLogin(raw: string): { type: 'email' | 'phone' | 'username'; value: string } {
@@ -287,6 +301,7 @@ function transition(db: MockDb, o: DbOrder, status: OrderStatus, by: MockUser | 
   o.delivered_at = status === 'livre' ? new Date().toISOString() : null;
   if (from === 'en_attente' && status !== 'annulee' && !o.deposit_paid_at) o.deposit_paid_at = new Date().toISOString();
   if (status === 'en_attente') o.deposit_paid_at = null;
+  o.payment_claim = null;
   if (status === 'annulee') adjustStock(db, o.items, 1);
   else if (from === 'annulee') adjustStock(db, o.items, -1);
   logEvent(db, o.id, 'status', { from_status: from, to_status: status, body: note }, by);
@@ -644,7 +659,24 @@ export const mockApi: KolaApi = {
 
   payments: {
     async config() {
-      return { enabled: true, driver: 'fake' };
+      const st = settingsOf(load());
+      return { enabled: false, driver: null, manual: { ...st.payment, whatsapp: st.whatsapp.shop_number || null } };
+    },
+    async claim(ref, input) {
+      await delay();
+      const db = load();
+      const user = currentUser(db);
+      const o = db.orders.find((x) => x.reference === ref && x.user_id === user.id);
+      if (!o) throw new ApiError('Commande introuvable.', 404);
+      const phone = input.payer_phone.replace(/\D/g, '').replace(/^(00)?242/, '');
+      if (!/^0\d{8}$/.test(phone)) validation({ payer_phone: 'Numéro invalide : 9 chiffres commençant par 0.' });
+      if (['annulee', 'livre'].includes(o.status)) validation({ payment: 'Cette commande n’attend plus de paiement.' });
+      const kind = o.status === 'en_attente' ? 'deposit' : 'balance';
+      const amount = kind === 'deposit' ? o.deposit : o.balance;
+      o.payment_claim = { kind, amount, operator: input.operator, payer_phone: phone, transaction_ref: input.transaction_ref || null, at: new Date().toISOString() };
+      logEvent(db, o.id, 'payment', { body: `Le client déclare avoir envoyé ${kind === 'deposit' ? 'l’acompte' : 'le solde'} (${amount} FCFA) par ${input.operator === 'mtn' ? 'MTN MoMo' : 'Airtel Money'} depuis le ${phone}${input.transaction_ref ? ` — réf. ${input.transaction_ref}` : ''}. À vérifier.` }, user);
+      save(db);
+      return stripOrder(o);
     },
     async start(ref, kind = 'deposit') {
       await delay();
@@ -972,6 +1004,33 @@ export const mockApi: KolaApi = {
       requireRole(db, 'gerant');
       db.promos = db.promos.filter((x) => x.id !== id);
       save(db);
+    },
+
+    async settings() {
+      await delay(150);
+      const db = load();
+      requireRole(db, 'gerant');
+      return clone(settingsOf(db));
+    },
+    async updateSettings(input) {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant');
+      const cur = settingsOf(db);
+      const next: ShopSettings = { payment: { ...cur.payment, ...input.payment }, whatsapp: { ...cur.whatsapp, ...input.whatsapp } };
+      for (const op of ['mtn', 'airtel'] as const) {
+        next.payment[op] = { ...cur.payment[op], ...input.payment?.[op] };
+        const n = next.payment[op].number.replace(/\D/g, '').replace(/^(00)?242/, '');
+        if (n && !/^0\d{8}$/.test(n)) validation({ [`payment.${op}.number`]: 'Numéro Mobile Money invalide : 9 chiffres commençant par 0.' });
+        next.payment[op].number = n;
+      }
+      db.settings = next;
+      save(db);
+      return clone(next);
+    },
+    async testWhatsApp() {
+      await delay();
+      return { sent: true };
     },
 
     async listCollections() {

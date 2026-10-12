@@ -26,7 +26,7 @@ use Illuminate\Support\Str;
     'reference', 'user_id', 'status', 'subtotal', 'discount', 'promo_code', 'promo_label', 'source', 'created_by',
     'total', 'deposit', 'balance', 'balance_paid',
     'payment_method', 'payment_phone', 'delivery_city', 'delivery_address', 'delivered_at',
-    'courier_id', 'delivery_date', 'delivery_slot', 'deposit_paid_at',
+    'courier_id', 'delivery_date', 'delivery_slot', 'deposit_paid_at', 'payment_claim',
 ])]
 class Order extends Model
 {
@@ -46,6 +46,7 @@ class Order extends Model
         'delivery_date' => null,
         'delivery_slot' => null,
         'deposit_paid_at' => null,
+        'payment_claim' => null,
     ];
 
     protected function casts(): array
@@ -62,6 +63,7 @@ class Order extends Model
             'discount' => 'integer',
             'delivery_date' => 'date',
             'deposit_paid_at' => 'datetime',
+            'payment_claim' => 'array',
         ];
     }
 
@@ -145,6 +147,8 @@ class Order extends Model
             if ($status === OrderStatus::EnAttente) {
                 $this->deposit_paid_at = null;
             }
+            // L'équipe a traité le paiement déclaré par le client
+            $this->payment_claim = null;
             $this->save();
 
             // Stock : une annulation rend les articles, une réactivation les reprend

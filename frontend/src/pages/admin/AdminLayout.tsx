@@ -21,6 +21,7 @@ import {
   Menu,
   Package,
   ReceiptText,
+  Settings2,
   Search,
   Users,
   X,
@@ -63,6 +64,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { to: '/admin/vitrine', label: "Vitrine d'accueil", Icon: Images, perm: 'storefront' },
       { to: '/admin/collections', label: 'Collections', Icon: LayoutGrid, perm: 'storefront' },
       { to: '/admin/equipe', label: 'Équipe', Icon: UsersRound, perm: 'team' },
+      { to: '/admin/parametres', label: 'Paramètres', Icon: Settings2, perm: 'team' },
     ],
   },
 ];
@@ -91,6 +93,7 @@ const TITLES: Record<string, { title: string; sub: string }> = {
   '/admin/livraisons': { title: 'Livraisons', sub: 'Tournées, créneaux et confirmations de remise' },
   '/admin/promotions': { title: 'Promotions', sub: 'Codes promo et remises famille' },
   '/admin/equipe': { title: 'Équipe', sub: 'Comptes de l’équipe et leurs accès' },
+  '/admin/parametres': { title: 'Paramètres', sub: 'Paiement Mobile Money et WhatsApp' },
 };
 
 /** Liste des commandes partagée par la sidebar, la cloche et les alertes (rafraîchie toutes les 30 s) */
@@ -153,6 +156,7 @@ function ding() {
 function useNewOrderAlerts() {
   const { data } = useOrdersFeed();
   const seen = useRef<number | null>(null);
+  const seenClaims = useRef(new Set<string>());
   const [unseen, setUnseen] = useState<Order[]>([]);
   const [sound, setSoundState] = useState(readSound);
   const navigate = useNavigate();
@@ -162,7 +166,16 @@ function useNewOrderAlerts() {
     const maxId = data.reduce((m, o) => Math.max(m, o.id), 0);
     if (seen.current === null) {
       seen.current = maxId; // premier chargement : rien n'est « nouveau »
+      data.forEach((o) => o.payment_claim && seenClaims.current.add(`${o.id}:${o.payment_claim.at}`));
       return;
+    }
+    // Paiements déclarés par les clients depuis le dernier passage
+    const claims = data.filter((o) => o.payment_claim && !seenClaims.current.has(`${o.id}:${o.payment_claim.at}`));
+    claims.forEach((o) => seenClaims.current.add(`${o.id}:${o.payment_claim!.at}`));
+    if (claims.length) {
+      if (readSound()) ding();
+      toast.success(`Paiement déclaré — ${claims[0].reference}${claims.length > 1 ? ` (+${claims.length - 1})` : ''} : à vérifier`);
+      setUnseen((u) => [...claims.filter((c) => !u.some((x) => x.id === c.id)), ...u]);
     }
     const fresh = data.filter((o) => o.id > seen.current! && o.source !== 'manuel');
     seen.current = Math.max(seen.current, maxId);
@@ -488,7 +501,10 @@ function AlertBell({ alerts, pending }: { alerts: Alerts; pending: number }) {
                   <span className="mt-1.5 size-2 shrink-0 rounded-full bg-rouille-500" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium text-ink">{o.customer?.full_name ?? 'Client'}</span>
-                    <span className="block font-mono text-[11.5px] text-ink-muted">{o.reference}</span>
+                    <span className="block font-mono text-[11.5px] text-ink-muted">
+                      {o.reference}
+                      {o.payment_claim ? ' · paiement déclaré' : ''}
+                    </span>
                   </span>
                 </button>
               ))

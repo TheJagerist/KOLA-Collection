@@ -43,7 +43,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-secret}
       KOLA_AUTO_MIGRATE: "true"
       KOLA_AUTO_SEED: "true"
-      KOLA_PAYMENT_DRIVER: ${KOLA_PAYMENT_DRIVER:-fake}   # simulateur Mobile Money en dev ; cinetpay en production
+      KOLA_PAYMENT_DRIVER: ${KOLA_PAYMENT_DRIVER:-}   # vide = dépôt Mobile Money manuel (numéros dans Admin → Paramètres) ; fake = simulateur ; cinetpay = paiement en ligne
     volumes:
       - ./backend:/var/www/html
 

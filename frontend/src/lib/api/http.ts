@@ -124,6 +124,7 @@ export const httpApi: KolaApi = {
 
   payments: {
     config: () => request('GET', '/payments/config'),
+    claim: (reference, input) => request('POST', `/orders/${reference}/payment-claim`, { ...input }),
     start: (reference, kind = 'deposit') => request('POST', `/orders/${reference}/pay`, { kind }),
     status: (tx) => request('GET', `/payments/${tx}`),
     fakeComplete: (tx, success) => request('POST', `/payments/fake/${tx}`, { success }),
@@ -178,5 +179,9 @@ export const httpApi: KolaApi = {
     createPromo: (input) => request<Promo>('POST', '/admin/promos', { ...input }),
     updatePromo: (id, input) => request<Promo>('PUT', `/admin/promos/${id}`, { ...input }),
     deletePromo: (id) => request<void>('DELETE', `/admin/promos/${id}`),
+
+    settings: () => request('GET', '/admin/settings'),
+    updateSettings: (input) => request('PUT', '/admin/settings', { ...input }),
+    testWhatsApp: () => request('POST', '/admin/settings/whatsapp-test'),
   },
 };

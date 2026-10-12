@@ -35,6 +35,7 @@ const AdminDeliveries = lazy(() => import('./pages/admin/AdminDeliveries'));
 const AdminReports = lazy(() => import('./pages/admin/AdminReports'));
 const AdminPromos = lazy(() => import('./pages/admin/AdminPromos'));
 const AdminTeam = lazy(() => import('./pages/admin/AdminTeam'));
+const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 const PaymentSimulator = lazy(() => import('./pages/PaymentSimulator'));
 
 const Fallback = () => <div className="min-h-[60vh]" />;
@@ -58,6 +59,7 @@ const router = createBrowserRouter([
       { path: 'rapports', element: s(<AdminReports />) },
       { path: 'promotions', element: s(<AdminPromos />) },
       { path: 'equipe', element: s(<AdminTeam />) },
+      { path: 'parametres', element: s(<AdminSettings />) },
     ],
   },
   {

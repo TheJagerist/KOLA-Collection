@@ -34,4 +34,7 @@ return [
         'rp_id' => env('KOLA_WEBAUTHN_RP_ID') ?: (parse_url((string) env('FRONTEND_URL', 'http://localhost'), PHP_URL_HOST) ?: 'localhost'),
         'rp_name' => 'Kōlā Collection',
     ],
+
+    // Alertes WhatsApp de l'équipe : callmebot (destinataires dans Admin → Paramètres) | log (tests)
+    'whatsapp_alerts' => env('KOLA_WHATSAPP_ALERTS', 'callmebot'),
 ];

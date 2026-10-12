@@ -51,6 +51,8 @@ class OrderResource extends JsonResource
             'delivery_date' => $this->delivery_date?->toDateString(),
             'delivery_slot' => $this->delivery_slot,
             'deposit_paid_at' => $this->deposit_paid_at?->toIso8601String(),
+            // Dépôt Mobile Money déclaré par le client, en attente de vérification par l'équipe
+            'payment_claim' => $this->payment_claim,
             'created_at' => $this->created_at?->toIso8601String(),
             'delivered_at' => $this->delivered_at?->toIso8601String(),
         ];

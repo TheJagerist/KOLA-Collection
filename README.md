@@ -30,6 +30,7 @@ Prérequis : Docker Desktop (Windows / macOS) ou Docker Engine + Compose v2.
 ```bash
 git clone https://github.com/TheJagerist/KOLA-Collection.git
 cd KOLA-Collection
+git checkout refonte-react-laravel
 docker compose up -d --build
 ```
 
@@ -38,21 +39,21 @@ docker compose up -d --build
 
 Le premier démarrage prend quelques minutes (installation de Composer et de npm dans les conteneurs).
 
+### Comptes (dev)
+
+| Rôle | Identifiant | Mot de passe |
+|---|---|---|
+| Gérant (admin) | `admin` | `admin1234` |
+| Préparateur | `prepa` | `kola1234` |
+| Livreur | `livreur` | `kola1234` |
+| Client | `nathalie242` | `kola1234` |
+
+Postgres : `localhost:5433`, base `kola`, utilisateur `kola`, mot de passe `secret`.
+Détails (mise à jour après `git pull`, codes de connexion en dev, dépannage) : voir [`README-MANU.md`](README-MANU.md#2-lancer-lapplication).
+
 ### Mode démo / mode API
 
-Le front fonctionne **sans backend** grâce à un mock qui reprend les vraies données de l'ancien site (`VITE_API_MODE=mock`, valeur par défaut). Comptes de démo :
-
-| Rôle | Utilisateur | Mot de passe |
-|---|---|---|
-| Client | `nathalie242` | `kola1234` |
-| Admin | `admin` | `admin1234` |
-
-L'API Laravel gère déjà tout le parcours client (catalogue, comptes, commandes) ; l'administration est en cours (voir [`README-MANU.md`](README-MANU.md)). Pour brancher le front sur l'API :
-
-```bash
-cp .env.example .env          # puis VITE_API_MODE=http
-docker compose up -d frontend
-```
+`VITE_API_MODE` dans `.env` (racine) : vide = auto (API si elle répond, sinon démo), `http` = API Laravel, `mock` = démo sans backend.
 
 ## Commandes utiles
 
