@@ -223,7 +223,7 @@ export default function AdminLayout() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="min-h-dvh bg-page lg:pl-[272px]">
+      <div className="flex min-h-dvh flex-col bg-page lg:pl-[272px]">
         {/* Sidebar bureau */}
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-[272px] lg:block">
           <Sidebar />
@@ -260,10 +260,12 @@ export default function AdminLayout() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          className="mx-auto max-w-[1400px] px-4 pt-6 pb-16 sm:px-6 lg:px-10 lg:pt-8"
+          className="mx-auto w-full max-w-[1400px] flex-1 px-4 pt-6 pb-12 sm:px-6 lg:px-10 lg:pt-8"
         >
           <Outlet />
         </motion.main>
+
+        <AdminFooter />
       </div>
     </MotionConfig>
   );
@@ -511,6 +513,43 @@ function AlertBell({ alerts, pending }: { alerts: Alerts; pending: number }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ PIED DE PAGE */
+function AdminFooter() {
+  const user = useAuth((st) => st.user);
+  const role = roleOf(user);
+  return (
+    <footer className="border-t border-line/80">
+      <div className="mx-auto flex max-w-[1400px] flex-col gap-3 px-4 py-5 text-[12.5px] text-ink-muted sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-10">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-ink-soft">Kōlā Collection</span>
+          <span aria-hidden>·</span>
+          <span>© {new Date().getFullYear()} Espace d’administration</span>
+          {role && (
+            <>
+              <span aria-hidden className="max-sm:hidden">·</span>
+              <span className="max-sm:hidden">Connecté en tant que {ROLE_LABEL[role].toLowerCase()}</span>
+            </>
+          )}
+        </div>
+        <nav className="flex flex-wrap items-center gap-x-4 gap-y-1" aria-label="Liens utiles">
+          <a href="/" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 transition hover:text-ink">
+            Voir la boutique <ExternalLink className="size-3" />
+          </a>
+          <Link to="/admin/profil" className="transition hover:text-ink">
+            Mon profil
+          </Link>
+          <a href="/contact" target="_blank" rel="noreferrer" className="transition hover:text-ink">
+            Aide
+          </a>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="size-1.5 rounded-full bg-emerald-500" /> Brazzaville · Pointe-Noire
+          </span>
+        </nav>
+      </div>
+    </footer>
   );
 }
 
