@@ -35,3 +35,51 @@ export const GoogleIcon = ({ className }: P) => (
     <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0 7.29 0 3.24 2.7 1.27 6.64l4 3.09C6.22 6.86 8.87 4.75 12 4.75z" />
   </svg>
 );
+
+/* Icônes pleines (style « applis du téléphone ») pour les infos de contact */
+
+export const PhoneFillIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z" />
+  </svg>
+);
+
+export const PinFillIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <path fillRule="evenodd" d="M12 2a7.5 7.5 0 0 0-7.5 7.5c0 5.3 6.2 11.6 6.9 12.2.3.3.9.3 1.2 0 .7-.6 6.9-6.9 6.9-12.2A7.5 7.5 0 0 0 12 2zm0 10.3a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6z" />
+  </svg>
+);
+
+export const UserFillIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <circle cx="12" cy="7.5" r="4.5" />
+    <path d="M3.5 20.2C4.3 16 7.8 13.5 12 13.5s7.7 2.5 8.5 6.7c.1.5-.3.8-.8.8H4.3c-.5 0-.9-.3-.8-.8z" />
+  </svg>
+);
+
+export const MailFillIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <path d="M4 4.5h16c1.1 0 2 .9 2 2v.3l-10 6.1L2 6.8v-.3c0-1.1.9-2 2-2z" />
+    <path d="M2 9.1V17.5c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9.1l-9.5 5.8c-.3.2-.7.2-1 0L2 9.1z" />
+  </svg>
+);
+
+export const ClockFillIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <path fillRule="evenodd" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5a1 1 0 1 0-2 0v5c0 .3.1.5.3.7l3 3a1 1 0 0 0 1.4-1.4L13 11.6V7z" />
+  </svg>
+);
+
+export const TruckFillIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <path d="M2 6c0-1.1.9-2 2-2h9c1.1 0 2 .9 2 2v1h2.6c.6 0 1.2.3 1.6.8l2.4 3.1c.3.4.4.8.4 1.2V16c0 .8-.6 1.5-1.4 1.5a3 3 0 0 0-5.9.5H9.3a3 3 0 0 0-5.9-.5C2.6 17.5 2 16.8 2 16V6zm13 3v3h4.8L17.5 9H15z" />
+    <circle cx="6.3" cy="18" r="2" />
+    <circle cx="17.7" cy="18" r="2" />
+  </svg>
+);
+
+export const NavigateFillIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden>
+    <path d="M20.6 3.4c.4.4.5 1 .3 1.5l-7 15.8c-.5 1-1.9.9-2.2-.1l-1.6-5.2-5.2-1.6c-1-.3-1.1-1.7-.1-2.2l15.8-7c.5-.2 1.1-.1 1.5.3z" />
+  </svg>
+);

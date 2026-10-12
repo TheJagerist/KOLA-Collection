@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Lock, MapPin, Smartphone, TicketPercent, X } from 'lucide-react';
+import { Lock, TicketPercent, X } from 'lucide-react';
 import { api, ApiError, type PaymentMethod } from '../lib/api';
 import { cartTotals, useCart } from '../stores/cart';
 import { useAuth } from '../stores/auth';
 import { qk } from '../hooks/queries';
-import { DELIVERY_CITIES, fcfa, NIVEAU_LABEL } from '../lib/format';
+import { IconBadge, OperatorBadge } from '../components/ui/ContactIcons';
+import { DELIVERY_CITIES, fcfa, formatPhone, NIVEAU_LABEL } from '../lib/format';
+import { ProductImage } from '../components/product/ProductImage';
 import { cn } from '../lib/cn';
 import { Button } from '../components/ui/Button';
 import { Input, Select } from '../components/ui/Field';
@@ -15,8 +17,8 @@ import { PageHeader } from '../components/ui/misc';
 import { OrderSummary } from './Cart';
 
 const OPERATORS: { v: PaymentMethod; name: string; hint: string; color: string; logo: string }[] = [
-  { v: 'airtel', name: 'Airtel Money', hint: 'Numéros 05…', color: 'text-[#E30613]', logo: 'airtel' },
-  { v: 'mtn', name: 'MTN Mobile Money', hint: 'Numéros 06…', color: 'text-[#d9a700]', logo: 'MTN' },
+  { v: 'airtel', name: 'Airtel Money', hint: 'Numéros 05…', color: 'bg-[#E40000] text-white', logo: 'airtel' },
+  { v: 'mtn', name: 'MTN Mobile Money', hint: 'Numéros 06…', color: 'bg-[#FFCC00] text-[#1a1a1a]', logo: 'MTN' },
 ];
 
 export default function Checkout() {
@@ -114,7 +116,7 @@ export default function Checkout() {
             <div className="rounded-2xl bg-rouille-50 px-5 py-4 text-[14px] font-medium text-rouille-600 dark:bg-rouille-500/10">{errors.items ?? quoteErr?.firstError()}</div>
           )}
 
-          <Section icon={<MapPin className="size-5" />} n="1" title="Livraison">
+          <Section icon={<IconBadge tone="location" size="lg" />} n="1" title="Livraison">
             <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
               <Select label="Ville" value={city} onChange={(e) => setCity(e.target.value)} error={errors.delivery_city}>
                 <option value="">Choisir…</option>
@@ -132,7 +134,7 @@ export default function Checkout() {
             </div>
           </Section>
 
-          <Section icon={<Smartphone className="size-5" />} n="2" title="Paiement de l'acompte">
+          <Section icon={<IconBadge tone="phone" size="lg" />} n="2" title="Paiement de l'acompte">
             <p className="-mt-1 mb-5 text-[14px] text-ink-soft">
               Vous réglez <strong className="text-ink">{fcfa(t.deposit)}</strong> maintenant, le solde de {fcfa(t.balance)} à la livraison. Notre équipe vous
               recontacte sur WhatsApp pour finaliser le paiement.
@@ -148,7 +150,7 @@ export default function Checkout() {
                     method === o.v ? 'border-inverse shadow-sm' : 'border-line hover:border-ink-muted',
                   )}
                 >
-                  <span className={cn('grid h-12 w-16 place-items-center rounded-xl bg-page text-[15px] font-black tracking-tight', o.color)}>{o.logo}</span>
+                  <span className={cn('grid h-12 w-16 place-items-center rounded-xl text-[15px] font-black tracking-tight shadow-sm', o.color)}>{o.logo}</span>
                   <span>
                     <span className="block font-semibold">{o.name}</span>
                     <span className="text-[13px] text-ink-muted">{o.hint}</span>
@@ -178,7 +180,50 @@ export default function Checkout() {
           </Section>
         </div>
 
-        <OrderSummary {...t} subtotal={q?.subtotal} discount={q?.discount} discountLabel={q?.promo ? `${q.promo.label}${q.promo.code ? ` (${q.promo.code})` : ''}` : undefined}>
+        <OrderSummary
+          {...t}
+          subtotal={q?.subtotal}
+          discount={q?.discount}
+          discountLabel={q?.promo ? `${q.promo.label}${q.promo.code ? ` (${q.promo.code})` : ''}` : undefined}
+          top={
+            <ul className="mt-5 space-y-3 border-b border-creme-50/10 pb-5">
+              {lines.map((l) => (
+                <li key={l.key} className="flex gap-3">
+                  <ProductImage product={l.product} className="size-14 shrink-0 rounded-xl" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14px] leading-snug font-medium text-creme-50">{l.product.name}</div>
+                    <div className="mt-0.5 text-[12.5px] text-creme-200/60">
+                      Taille {l.size} · {NIVEAU_LABEL[l.niveau]} · ×{l.qty}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-[14px] font-medium text-creme-50 tabular-nums">{fcfa(l.product.price * l.qty)}</span>
+                </li>
+              ))}
+            </ul>
+          }
+        >
+          <div className="mt-5 space-y-3 rounded-2xl border border-creme-50/10 p-4 text-[13.5px]">
+            <RecapRow tone="user" label="Client">
+              <span className="font-medium text-creme-50">{user.full_name}</span>
+              {user.username && <span className="text-creme-200/60"> · @{user.username}</span>}
+              {user.email && <span className="block truncate text-creme-200/60">{user.email}</span>}
+              {user.phone && <span className="block text-creme-200/60">{formatPhone(user.phone)}</span>}
+            </RecapRow>
+            <RecapRow tone="location" label="Livraison">
+              {city || address.trim() ? (
+                <>
+                  <span className="font-medium text-creme-50">{city || 'Ville à choisir'}</span>
+                  {address.trim() && <span className="block text-creme-200/60">{address.trim()}</span>}
+                </>
+              ) : (
+                <span className="text-creme-200/45 italic">À renseigner</span>
+              )}
+            </RecapRow>
+            <RecapRow tone="phone" label="Paiement de l’acompte">
+              {method ? <OperatorBadge op={method} className="mt-0.5" /> : <span className="text-creme-200/45 italic">Opérateur à choisir</span>}
+              {/^0\d{8}$/.test(cleanPhone) && <span className="block text-creme-200/60">{formatPhone(cleanPhone)}</span>}
+            </RecapRow>
+          </div>
           <div className="mt-5">
             {promo && q?.promo?.code ? (
               <div className="flex items-center justify-between gap-2 rounded-xl bg-emerald-400/10 px-3 py-2.5 text-[13.5px] text-emerald-300">
@@ -212,28 +257,62 @@ export default function Checkout() {
             )}
             {promoError && <p className="mt-1.5 text-[12.5px] font-medium text-rouille-400">{promoError}</p>}
           </div>
-          <ul className="mt-5 space-y-2 border-t border-creme-50/10 pt-4 text-[13px] text-creme-200/80">
-            {lines.map((l) => (
-              <li key={l.key} className="flex justify-between gap-3">
-                <span className="truncate">
-                  {l.qty} × {l.product.name} <span className="text-creme-200/50">({l.size}, {NIVEAU_LABEL[l.niveau]})</span>
-                </span>
-                <span className="shrink-0">{fcfa(l.product.price * l.qty)}</span>
-              </li>
-            ))}
-          </ul>
           <Button size="lg" className="mt-6 w-full" onClick={validate} icon={<Lock className="size-4" />}>
             Valider la commande
           </Button>
         </OrderSummary>
       </div>
 
-      <Modal open={confirm} onClose={() => !mutation.isPending && setConfirm(false)} eyebrow="Dernière étape" title="Confirmer la commande ?">
-        <p className="text-[15px] leading-relaxed text-ink-soft">
-          Votre commande de <strong className="text-ink">{fcfa(t.total)}</strong> va être enregistrée. L'acompte de{' '}
-          <strong className="text-ink">{fcfa(t.deposit)}</strong> sera à régler via {method === 'airtel' ? 'Airtel Money' : 'MTN Mobile Money'} (+242 {cleanPhone}
-          ). Livraison à {city}.
-        </p>
+      <Modal open={confirm} onClose={() => !mutation.isPending && setConfirm(false)} eyebrow="Dernière étape" title="Confirmer la commande ?" className="sm:max-w-xl">
+        <div className="space-y-4 text-[14px]">
+          <ul className="divide-y divide-line rounded-2xl border border-line">
+            {lines.map((l) => (
+              <li key={l.key} className="flex items-center gap-3 p-3">
+                <ProductImage product={l.product} className="size-11 shrink-0 rounded-lg" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium text-ink">{l.product.name}</div>
+                  <div className="text-[12.5px] text-ink-muted">
+                    Taille {l.size} · {NIVEAU_LABEL[l.niveau]} · ×{l.qty}
+                  </div>
+                </div>
+                <span className="font-medium text-ink tabular-nums">{fcfa(l.product.price * l.qty)}</span>
+              </li>
+            ))}
+          </ul>
+          <dl className="grid items-center gap-x-4 gap-y-2.5 rounded-2xl bg-surface-2/60 p-4 sm:grid-cols-[auto_1fr]">
+            <dt className="flex items-center gap-2 text-ink-muted">
+              <IconBadge tone="user" size="sm" /> Client
+            </dt>
+            <dd className="text-ink">
+              {user.full_name}
+              {user.phone ? ` · ${formatPhone(user.phone)}` : ''}
+            </dd>
+            <dt className="flex items-center gap-2 text-ink-muted">
+              <IconBadge tone="location" size="sm" /> Livraison
+            </dt>
+            <dd className="text-ink">
+              {city} — {address.trim()}
+            </dd>
+            <dt className="flex items-center gap-2 text-ink-muted">
+              <IconBadge tone="phone" size="sm" /> Paiement
+            </dt>
+            <dd className="flex flex-wrap items-center gap-2 text-ink">
+              {method && <OperatorBadge op={method} />} {formatPhone(cleanPhone)}
+            </dd>
+            {!!q?.discount && (
+              <>
+                <dt className="text-ink-muted sm:pl-8">Remise</dt>
+                <dd className="font-medium text-emerald-600 dark:text-emerald-400">− {fcfa(q.discount)}</dd>
+              </>
+            )}
+            <dt className="text-ink-muted">Total</dt>
+            <dd className="font-semibold text-ink">{fcfa(t.total)}</dd>
+            <dt className="text-ink-muted">Acompte maintenant</dt>
+            <dd className="font-semibold text-rouille-600">{fcfa(t.deposit)}</dd>
+            <dt className="text-ink-muted">Solde à la livraison</dt>
+            <dd className="text-ink">{fcfa(t.balance)}</dd>
+          </dl>
+        </div>
         <div className="mt-7 grid gap-2 sm:grid-cols-2">
           <Button variant="outline" onClick={() => setConfirm(false)} disabled={mutation.isPending}>
             Revoir
@@ -247,11 +326,23 @@ export default function Checkout() {
   );
 }
 
+function RecapRow({ tone, label, children }: { tone: 'user' | 'location' | 'phone'; label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-3">
+      <IconBadge tone={tone} />
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-semibold tracking-[0.1em] text-creme-200/45 uppercase">{label}</div>
+        <div className="mt-0.5 leading-snug">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 function Section({ icon, n, title, children }: { icon: React.ReactNode; n: string; title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-[28px] border border-line bg-surface p-6 sm:p-8">
       <div className="mb-6 flex items-center gap-3">
-        <span className="grid size-10 place-items-center rounded-full bg-surface-2 text-rouille-600">{icon}</span>
+        {icon}
         <h2 className="text-2xl">
           <span className="mr-2 text-ink-muted">{n}.</span>
           {title}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2, Clock, MapPin, Navigation, PackageCheck, Phone, Printer, Truck } from 'lucide-react';
+import { CheckCircle2, PackageCheck, Printer, Truck } from 'lucide-react';
 import { api, type Order } from '../../lib/api';
 import { qk, useAdminMutation } from '../../hooks/queries';
 import { useAuth } from '../../stores/auth';
@@ -10,7 +10,8 @@ import { printSlips } from '../../lib/print';
 import { EmptyState, Skeleton, StatusBadge } from '../../components/ui/misc';
 import { Modal } from '../../components/ui/Modal';
 import { Button } from '../../components/ui/Button';
-import { WhatsAppIcon } from '../../components/ui/icons';
+import { NavigateFillIcon, PhoneFillIcon, WhatsAppIcon } from '../../components/ui/icons';
+import { IconBadge } from '../../components/ui/ContactIcons';
 import { cn } from '../../lib/cn';
 
 const toCollect = (o: Order) => (o.balance_paid ? 0 : o.status === 'en_attente' ? o.total : o.balance);
@@ -100,14 +101,14 @@ export default function AdminDeliveries() {
                 </div>
 
                 <div className="mt-3 space-y-1.5 text-[13.5px] text-ink-soft">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="mt-0.5 size-4 shrink-0 text-ink-muted" />
-                    <span>
+                  <div className="flex items-start gap-2.5">
+                    <IconBadge tone="location" size="sm" />
+                    <span className="pt-0.5">
                       <strong className="font-semibold text-ink">{o.delivery_city}</strong> — {o.delivery_address}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="size-4 shrink-0 text-ink-muted" />
+                  <div className="flex items-center gap-2.5">
+                    <IconBadge tone="time" size="sm" />
                     {o.delivery_date ? (
                       <span className={cn(o.delivery_date === today && 'font-semibold text-rouille-600', o.delivery_date < today && 'font-semibold text-rouille-600')}>
                         {o.delivery_date === today ? "Aujourd'hui" : new Date(o.delivery_date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' })}
@@ -118,8 +119,8 @@ export default function AdminDeliveries() {
                     )}
                   </div>
                   {seeAll && (
-                    <div className="flex items-center gap-2">
-                      <Truck className="size-4 shrink-0 text-ink-muted" />
+                    <div className="flex items-center gap-2.5">
+                      <IconBadge tone="truck" size="sm" />
                       {o.courier?.full_name ?? <span className="text-amber-700 dark:text-amber-400">Pas de livreur</span>}
                     </div>
                   )}
@@ -135,14 +136,14 @@ export default function AdminDeliveries() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-3 gap-2">
-                  <a href={`tel:+242${o.payment_phone}`} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-line text-[13px] font-semibold text-ink hover:border-ink/25">
-                    <Phone className="size-4" /> Appeler
+                  <a href={`tel:+242${o.payment_phone}`} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-500 text-[13px] font-semibold text-white shadow-sm hover:bg-emerald-600">
+                    <PhoneFillIcon className="size-4" /> Appeler
                   </a>
-                  <a href={wa(o)} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-line text-[13px] font-semibold text-[#1ebe5a] hover:border-ink/25">
+                  <a href={wa(o)} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#25D366] text-[13px] font-semibold text-white shadow-sm hover:bg-[#1ebe5a]">
                     <WhatsAppIcon className="size-4" /> Message
                   </a>
-                  <a href={maps(o)} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-line text-[13px] font-semibold text-ink hover:border-ink/25">
-                    <Navigation className="size-4" /> Itinéraire
+                  <a href={maps(o)} target="_blank" rel="noreferrer" className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-sky-500 text-[13px] font-semibold text-white shadow-sm hover:bg-sky-600">
+                    <NavigateFillIcon className="size-4" /> Itinéraire
                   </a>
                 </div>
                 <div className="mt-auto pt-2">

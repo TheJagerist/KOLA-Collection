@@ -1,13 +1,14 @@
-import { Mail, ArrowUpRight } from 'lucide-react';
-import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from '../components/ui/icons';
+import { ArrowUpRight } from 'lucide-react';
+import { FacebookIcon, InstagramIcon, MailFillIcon, PhoneFillIcon, TikTokIcon, WhatsAppIcon } from '../components/ui/icons';
 import { contactWhatsAppLink, WHATSAPP_NUMBER } from '../lib/whatsapp';
 
 const CARDS = [
   { href: contactWhatsAppLink(), title: 'WhatsApp', sub: `+${WHATSAPP_NUMBER.replace(/^(\d{3})(\d{2})(\d{3})(\d{2})(\d{2})$/, '$1 $2 $3 $4 $5')}`, Icon: WhatsAppIcon, bg: 'bg-[#25D366]' },
+  { href: `tel:+${WHATSAPP_NUMBER}`, title: 'Appeler', sub: `+${WHATSAPP_NUMBER.replace(/^(\d{3})(\d{2})(\d{3})(\d{2})(\d{2})$/, '$1 $2 $3 $4 $5')}`, Icon: PhoneFillIcon, bg: 'bg-emerald-500' },
   { href: 'https://instagram.com/kolacollection', title: 'Instagram', sub: '@kolacollection', Icon: InstagramIcon, bg: 'bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#515BD4]' },
   { href: 'https://tiktok.com/@kolacollection', title: 'TikTok', sub: '@kolacollection', Icon: TikTokIcon, bg: 'bg-brun-950' },
   { href: 'https://facebook.com/kolacollection', title: 'Facebook', sub: 'Kōlā Collection', Icon: FacebookIcon, bg: 'bg-[#1877F2]' },
-  { href: 'mailto:contact@kolacollection.cg', title: 'E-mail', sub: 'contact@kolacollection.cg', Icon: Mail, bg: 'bg-rouille-500' },
+  { href: 'mailto:contact@kolacollection.cg', title: 'E-mail', sub: 'contact@kolacollection.cg', Icon: MailFillIcon, bg: 'bg-sky-500' },
 ];
 
 export default function Contact() {
@@ -29,11 +30,11 @@ export default function Contact() {
           <a
             key={title}
             href={href}
-            target={href.startsWith('mailto') ? undefined : '_blank'}
+            target={/^(mailto|tel):/.test(href) ? undefined : '_blank'}
             rel="noopener noreferrer"
             className={`group flex items-center gap-5 rounded-3xl border border-line bg-surface p-6 transition hover:-translate-y-0.5 hover:shadow-[0_20px_40px_-24px_rgba(61,46,31,0.4)] ${i === 0 ? 'lg:col-span-1' : ''}`}
           >
-            <span className={`grid size-14 shrink-0 place-items-center rounded-2xl text-white ${bg}`}>
+            <span className={`grid size-14 shrink-0 place-items-center rounded-2xl text-white shadow-sm ${bg}`}>
               <Icon className="size-6" />
             </span>
             <span className="min-w-0 flex-1">

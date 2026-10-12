@@ -2,18 +2,20 @@ import { useEffect, useState } from 'react';
 import { useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
-import { Check, CreditCard, Download, FileText, Loader2, MapPin, Phone, Truck, User as UserIcon, Wallet, XCircle } from 'lucide-react';
+import { Check, Clock, CreditCard, Download, FileText, Loader2, Truck, Wallet, XCircle } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import type { Order } from '../lib/api';
 import { qk, useMyOrder } from '../hooks/queries';
 import { useAuth } from '../stores/auth';
 import { orderWhatsAppLink } from '../lib/whatsapp';
+import { IconBadge, mapsHref, OperatorBadge, telHref } from '../components/ui/ContactIcons';
 import { fcfa, formatDateTime, formatPhone, NIVEAU_LABEL, paidAmounts, PAYMENT_LABEL, paymentState } from '../lib/format';
 import { Button, ButtonLink } from '../components/ui/Button';
 import { PaymentBadge, Skeleton, StatusBadge } from '../components/ui/misc';
-import { WhatsAppIcon } from '../components/ui/icons';
+import { NavigateFillIcon, WhatsAppIcon } from '../components/ui/icons';
 import { toast } from '../stores/toast';
 import { cn } from '../lib/cn';
+import { ManualPaymentModal } from '../components/payment/ManualPaymentModal';
 
 export default function OrderConfirmation() {
   const { reference = '' } = useParams();
@@ -68,6 +70,7 @@ export default function OrderConfirmation() {
     }
   };
 
+  const [manualOpen, setManualOpen] = useState(false);
   const ps = order ? paymentState(order) : 'impaye';
   const amounts = order ? paidAmounts(order) : { paid: 0, due: 0 };
   const isNew = !!state?.order;
@@ -94,8 +97,8 @@ export default function OrderConfirmation() {
           <p className="mx-auto mt-4 max-w-lg text-center text-[15.5px] leading-relaxed text-ink-soft">
             {ps === 'impaye' ? (
               <>
-                Merci ! Envoyez-nous la commande <strong className="text-ink">{order.reference}</strong> sur WhatsApp : nous vous indiquerons comment régler
-                l'acompte de <strong className="text-ink">{fcfa(order.deposit)}</strong>.
+                Merci ! L’équipe Kōlā a reçu votre commande <strong className="text-ink">{order.reference}</strong>. Pour la confirmer, envoyez l’acompte de{' '}
+                <strong className="text-ink">{fcfa(order.deposit)}</strong> par Mobile Money.
               </>
             ) : ps === 'acompte' ? (
               <>Acompte reçu, merci ! Le solde de {fcfa(amounts.due)} se règle à la livraison.</>
@@ -138,7 +141,24 @@ export default function OrderConfirmation() {
             </div>
           )}
 
+          {order.payment_claim && (
+            <div className="mx-auto mt-6 flex max-w-lg items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-[14px] text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200">
+              <Clock className="mt-0.5 size-5 shrink-0" />
+              <div>
+                <strong>Paiement déclaré — vérification en cours</strong>
+                <div className="mt-0.5 text-[13px] opacity-80">
+                  {fcfa(order.payment_claim.amount)} envoyés par {PAYMENT_LABEL[order.payment_claim.operator]} depuis le {formatPhone(order.payment_claim.payer_phone)}. Nous validons votre commande dès réception.
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center">
+            {!payCfg?.enabled && payCfg?.manual && !order.payment_claim && (ps === 'impaye' || (ps === 'acompte' && !order.balance_paid && order.status === 'transit')) && (
+              <Button size="lg" onClick={() => setManualOpen(true)} icon={<Wallet className="size-4" />}>
+                {ps === 'impaye' ? `Payer l’acompte · ${fcfa(order.deposit)}` : `Payer le solde · ${fcfa(amounts.due)}`}
+              </Button>
+            )}
             {payCfg?.enabled && (ps === 'impaye' || (ps === 'acompte' && !order.balance_paid)) && (
               <Button size="lg" onClick={() => pay(ps === 'impaye' ? 'deposit' : 'balance')} loading={paying} icon={<CreditCard className="size-4" />}>
                 {ps === 'impaye' ? `Payer l’acompte en ligne · ${fcfa(order.deposit)}` : `Payer le solde en ligne · ${fcfa(amounts.due)}`}
@@ -149,13 +169,13 @@ export default function OrderConfirmation() {
                 href={orderWhatsAppLink(order, user?.full_name)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex h-13 items-center justify-center gap-2.5 rounded-full bg-[#25D366] px-7 text-[15px] font-semibold text-white shadow-[0_10px_30px_-12px_rgba(37,211,102,0.8)] transition hover:bg-[#1ebe5a]"
+                className="inline-flex h-13 items-center justify-center gap-2.5 rounded-full border border-[#25D366]/50 px-7 text-[15px] font-semibold text-[#1ebe5a] transition hover:bg-[#25D366]/10"
               >
                 <WhatsAppIcon className="size-5" />
-                Envoyer sur WhatsApp
+                Nous écrire sur WhatsApp
               </a>
             )}
-            <Button size="lg" variant={ps === 'impaye' || (payCfg?.enabled && ps === 'acompte' && !order.balance_paid) ? 'outline' : 'primary'} onClick={download} loading={busy} icon={<Download className="size-4" />}>
+            <Button size="lg" variant={ps === 'impaye' || order.payment_claim || (payCfg?.enabled && ps === 'acompte' && !order.balance_paid) ? 'outline' : 'primary'} onClick={download} loading={busy} icon={<Download className="size-4" />}>
               Télécharger le reçu
             </Button>
             <ButtonLink to="/compte" size="lg" variant="ghost">
@@ -189,20 +209,37 @@ export default function OrderConfirmation() {
 
               {/* Informations client */}
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                <InfoCard Icon={UserIcon} title="Client">
+                <InfoCard tone="user" title="Client">
                   <div className="font-semibold text-ink">{order.customer?.full_name ?? user?.full_name ?? '—'}</div>
                   {(order.customer?.username ?? user?.username) && <div className="text-ink-muted">@{order.customer?.username ?? user?.username}</div>}
-                  {user?.email && <div className="truncate text-ink-muted">{user.email}</div>}
+                  {user?.email && (
+                    <a href={`mailto:${user.email}`} className="mt-1 flex items-center gap-1.5 truncate text-ink-muted hover:text-ink">
+                      <IconBadge tone="mail" size="sm" className="size-5 rounded-md [&>svg]:size-3" />
+                      <span className="truncate">{user.email}</span>
+                    </a>
+                  )}
                 </InfoCard>
-                <InfoCard Icon={Phone} title="Contact & paiement">
-                  <div className="font-semibold text-ink">{formatPhone(order.payment_phone)}</div>
-                  <div className="text-ink-muted">{PAYMENT_LABEL[order.payment_method]}</div>
+                <InfoCard tone="phone" title="Contact & paiement">
+                  <a href={telHref(order.payment_phone)} className="font-semibold whitespace-nowrap text-ink hover:text-emerald-700 dark:hover:text-emerald-400">
+                    {formatPhone(order.payment_phone)}
+                  </a>
+                  <div className="mt-1.5">
+                    <OperatorBadge op={order.payment_method} />
+                  </div>
                 </InfoCard>
-                <InfoCard Icon={MapPin} title="Livraison">
+                <InfoCard tone="location" title="Livraison">
                   {order.delivery_city ? (
                     <>
                       <div className="font-semibold text-ink">{order.delivery_city}</div>
                       <div className="text-ink-muted">{order.delivery_address}</div>
+                      <a
+                        href={mapsHref(order.delivery_address, order.delivery_city)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-[12.5px] font-semibold text-rouille-600 hover:underline"
+                      >
+                        <NavigateFillIcon className="size-3" /> Voir sur la carte
+                      </a>
                     </>
                   ) : (
                     <div className="text-ink-muted">Retrait en boutique</div>
@@ -267,8 +304,21 @@ export default function OrderConfirmation() {
           {ps === 'impaye' && (
             <p className="mt-5 flex items-start justify-center gap-2 text-center text-[13px] text-ink-muted">
               <Wallet className="mt-0.5 size-4 shrink-0" />
-              Dès réception de votre acompte, nous validons la commande et vous renvoyons le reçu mis à jour sur WhatsApp.
+              Dès réception de votre acompte, nous validons la commande et votre reçu se met à jour (envoyé aussi par e-mail si vous en avez renseigné un).
             </p>
+          )}
+
+          {payCfg?.manual && (
+            <ManualPaymentModal
+              open={manualOpen}
+              onClose={() => setManualOpen(false)}
+              order={order}
+              manual={payCfg.manual}
+              onClaimed={(o) => {
+                qc.setQueryData(qk.myOrder(reference), o);
+                qc.invalidateQueries({ queryKey: qk.myOrders });
+              }}
+            />
           )}
         </>
       )}
@@ -276,14 +326,14 @@ export default function OrderConfirmation() {
   );
 }
 
-function InfoCard({ Icon, title, children }: { Icon: typeof Phone; title: string; children: React.ReactNode }) {
+function InfoCard({ tone, title, children }: { tone: 'user' | 'phone' | 'location'; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl bg-surface-2/50 p-4 text-[13.5px] leading-relaxed">
-      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.1em] text-ink-muted uppercase">
-        <Icon className="size-3.5" />
-        {title}
+    <div className="flex gap-3 rounded-2xl border border-line/70 bg-surface-2/40 p-4 text-[13.5px] leading-relaxed">
+      <IconBadge tone={tone} size="lg" />
+      <div className="min-w-0 flex-1">
+        <div className="mb-0.5 text-[11px] font-semibold tracking-[0.1em] text-ink-muted uppercase">{title}</div>
+        {children}
       </div>
-      {children}
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Ban, CheckCircle2, Download, FileSpreadsheet, Eye, Loader2, MapPin, MoreHorizontal, PackageCheck, Phone, Plus, Printer, Search, Truck, Wallet, X } from 'lucide-react';
+import { Ban, BellRing, CheckCircle2, Download, FileSpreadsheet, Eye, Loader2, MoreHorizontal, PackageCheck, Phone, Plus, Printer, Search, Truck, Wallet, X } from 'lucide-react';
 import { api, type Order, type OrderStatus } from '../../lib/api';
 import { qk, useAdminMutation } from '../../hooks/queries';
+import { IconBadge, mapsHref, OperatorBadge, telHref } from '../../components/ui/ContactIcons';
 import { fcfa, formatDate, formatPhone, NIVEAU_LABEL, ORDER_STATUS, PAYMENT_LABEL } from '../../lib/format';
 import { EmptyState, PaymentBadge, Skeleton, StatusBadge } from '../../components/ui/misc';
 import { Button } from '../../components/ui/Button';
@@ -261,6 +262,7 @@ export default function AdminOrders() {
                         <div className="flex flex-col items-start gap-1.5">
                           <StatusBadge status={o.status} short />
                           <PaymentBadge order={o} className="px-2 py-0.5 text-[10px]" />
+                          {o.payment_claim && <ClaimBadge />}
                         </div>
                       </Td>
                       <Td align="right">
@@ -295,6 +297,7 @@ export default function AdminOrders() {
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         <StatusBadge status={o.status} short className="py-0.5 text-[11px]" />
                         <PaymentBadge order={o} className="py-0.5 text-[10px]" />
+                        {o.payment_claim && <ClaimBadge />}
                       </div>
                     </div>
                   </button>
@@ -391,6 +394,31 @@ function OrderDetail({ order: o, onStatus, busy, justPaid }: { order: Order; onS
         </div>
       )}
 
+      {o.payment_claim && (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 dark:border-sky-500/30 dark:bg-sky-500/10">
+          <div className="flex items-start gap-3">
+            <BellRing className="mt-0.5 size-5 shrink-0 text-sky-700 dark:text-sky-300" />
+            <div className="min-w-0 flex-1 text-[13.5px] text-sky-950 dark:text-sky-100">
+              <div className="font-semibold">Le client a déclaré un paiement — à vérifier</div>
+              <div className="mt-1 space-y-0.5 text-[13px] opacity-90">
+                <div>
+                  {o.payment_claim.kind === 'deposit' ? 'Acompte' : 'Solde'} de <strong>{fcfa(o.payment_claim.amount)}</strong> par {PAYMENT_LABEL[o.payment_claim.operator]}
+                </div>
+                <div>Depuis le {formatPhone(o.payment_claim.payer_phone)}</div>
+                {o.payment_claim.transaction_ref && <div>Réf. transaction : <span className="font-mono font-semibold">{o.payment_claim.transaction_ref}</span></div>}
+                <div className="text-[12px] opacity-75">Déclaré {timeAgo(o.payment_claim.at)}</div>
+              </div>
+              <p className="mt-2 text-[12.5px] opacity-80">Vérifiez sur votre téléphone {PAYMENT_LABEL[o.payment_claim.operator]} que l’argent est bien arrivé, puis confirmez.</p>
+              {NEXT[o.status] && (o.status === 'en_attente' || o.payment_claim.kind === 'balance') && (
+                <Button size="sm" className="mt-3" disabled={busy} onClick={() => onStatus(o.payment_claim!.kind === 'deposit' ? 'validee' : 'livre')}>
+                  {o.payment_claim.kind === 'deposit' ? 'Argent reçu : valider la commande' : 'Solde reçu : marquer livrée'}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <PaymentBadge order={o} />
@@ -417,17 +445,23 @@ function OrderDetail({ order: o, onStatus, busy, justPaid }: { order: Order; onS
         <div className="text-[11.5px] font-semibold tracking-[0.08em] text-ink-muted uppercase">Client</div>
         <div className="mt-1.5 font-semibold text-ink">{o.customer?.full_name ?? 'Client'}</div>
         {o.customer?.username && <div className="text-[13px] text-ink-muted">@{o.customer.username}</div>}
-        <div className="mt-3 space-y-1.5 text-[13.5px] text-ink-soft">
-          <div className="flex items-center gap-2">
-            <Phone className="size-4 text-ink-muted" />
-            <a href={`tel:+242${o.payment_phone}`} className="hover:underline">
+        <div className="mt-3 space-y-2.5 text-[13.5px] text-ink-soft">
+          <div className="flex items-center gap-2.5">
+            <IconBadge tone="phone" size="sm" />
+            <a href={telHref(o.payment_phone)} className="font-medium text-ink hover:underline">
               {formatPhone(o.payment_phone)}
             </a>
-            <span className="text-ink-muted">· {PAYMENT_LABEL[o.payment_method]}</span>
+            <OperatorBadge op={o.payment_method} />
           </div>
-          <div className="flex items-start gap-2">
-            <MapPin className="mt-0.5 size-4 text-ink-muted" />
-            <span>{o.delivery_city ? `${o.delivery_city} — ${o.delivery_address}` : 'Retrait en boutique'}</span>
+          <div className="flex items-start gap-2.5">
+            <IconBadge tone="location" size="sm" />
+            {o.delivery_city ? (
+              <a href={mapsHref(o.delivery_address, o.delivery_city)} target="_blank" rel="noreferrer" className="pt-0.5 hover:underline">
+                <strong className="font-semibold text-ink">{o.delivery_city}</strong> — {o.delivery_address}
+              </a>
+            ) : (
+              <span className="pt-0.5">Retrait en boutique</span>
+            )}
           </div>
         </div>
       </section>
@@ -509,6 +543,15 @@ function OrderDetail({ order: o, onStatus, busy, justPaid }: { order: Order; onS
         </select>
       </label>
     </div>
+  );
+}
+
+function ClaimBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold tracking-wide whitespace-nowrap text-sky-900 uppercase ring-1 ring-sky-200 ring-inset dark:bg-sky-500/15 dark:text-sky-200 dark:ring-sky-500/30">
+      <span className="size-1.5 animate-pulse rounded-full bg-current" />
+      Paiement déclaré
+    </span>
   );
 }
 

@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { FileSpreadsheet, Mail, MapPin, Phone, Search, StickyNote, Users } from 'lucide-react';
+import { FileSpreadsheet, Search, StickyNote, Users } from 'lucide-react';
 import { api } from '../../lib/api';
 import { qk, useAdminMutation } from '../../hooks/queries';
+import { IconBadge, mapsHref } from '../../components/ui/ContactIcons';
 import { fcfa, formatPhone } from '../../lib/format';
 import { EmptyState, Skeleton, StatusBadge } from '../../components/ui/misc';
 import { Sheet } from '../../components/ui/Sheet';
 import { Button } from '../../components/ui/Button';
-import { WhatsAppIcon } from '../../components/ui/icons';
+import { PhoneFillIcon, WhatsAppIcon } from '../../components/ui/icons';
 import { timeAgo } from './AdminDashboard';
 import { Avatar } from '../../components/ui/Avatar';
 import { CellStack, downloadCsv, Pagination, Table, TableCard, Td, Th, THead, Tr, usePagination, useSort } from '../../components/admin/DataTable';
@@ -185,8 +186,8 @@ function CustomerDrawer({ id }: { id: number }) {
 
       <div className="grid grid-cols-2 gap-2">
         {c.phone ? (
-          <a href={`tel:+242${c.phone}`} className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-ink/15 text-[13.5px] font-semibold text-ink hover:bg-ink/5">
-            <Phone className="size-4" /> {formatPhone(c.phone)}
+          <a href={`tel:+242${c.phone}`} className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-emerald-500 text-[13.5px] font-semibold text-white shadow-sm hover:bg-emerald-600">
+            <PhoneFillIcon className="size-4" /> {formatPhone(c.phone)}
           </a>
         ) : (
           <span className="inline-flex h-11 items-center justify-center rounded-full border border-dashed border-line text-[13px] text-ink-muted">Pas de téléphone</span>
@@ -201,16 +202,16 @@ function CustomerDrawer({ id }: { id: number }) {
       </div>
 
       {(c.email || c.city) && (
-        <div className="space-y-1.5 text-[13.5px] text-ink-soft">
+        <div className="space-y-2 text-[13.5px] text-ink-soft">
           {c.email && (
-            <div className="flex items-center gap-2">
-              <Mail className="size-4 text-ink-muted" /> {c.email}
-            </div>
+            <a href={`mailto:${c.email}`} className="flex items-center gap-2.5 hover:text-ink">
+              <IconBadge tone="mail" size="sm" /> {c.email}
+            </a>
           )}
           {c.city && (
-            <div className="flex items-center gap-2">
-              <MapPin className="size-4 text-ink-muted" /> {c.city}
-            </div>
+            <a href={mapsHref(c.city)} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 hover:text-ink">
+              <IconBadge tone="location" size="sm" /> {c.city}
+            </a>
           )}
         </div>
       )}

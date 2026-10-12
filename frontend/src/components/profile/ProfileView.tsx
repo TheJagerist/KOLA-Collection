@@ -25,6 +25,7 @@ import { qk, useMyOrders } from '../../hooks/queries';
 import { useAuth } from '../../stores/auth';
 import { toast } from '../../stores/toast';
 import { DELIVERY_CITIES, formatPhone } from '../../lib/format';
+import { PinFillIcon } from '../ui/icons';
 import { cn } from '../../lib/cn';
 import { Button } from '../ui/Button';
 import { Input, Select, Textarea } from '../ui/Field';
@@ -551,10 +552,10 @@ function DeliverySection({ user }: { user: User }) {
                   <span
                     className={cn(
                       'grid size-9 place-items-center rounded-xl',
-                      f.values.default_city === c ? 'bg-inverse text-on-inverse' : 'bg-surface-2 text-ink-soft',
+                      f.values.default_city === c ? 'bg-rouille-500 text-white shadow-sm' : 'bg-surface-2 text-ink-soft',
                     )}
                   >
-                    <MapPin className="size-4" />
+                    <PinFillIcon className="size-[18px]" />
                   </span>
                   <span className="font-semibold text-ink">{c}</span>
                 </button>
