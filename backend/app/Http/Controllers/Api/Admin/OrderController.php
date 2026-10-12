@@ -22,7 +22,7 @@ class OrderController extends Controller
         ]);
 
         $orders = Order::query()
-            ->with(['items.product', 'user'])
+            ->with(['items.product', 'user', 'courier'])
             ->when(
                 isset($data['status']),
                 fn ($q) => $q->where('status', $data['status'])
@@ -45,6 +45,6 @@ class OrderController extends Controller
 
         $order->transitionTo(OrderStatus::from($data['status']));
 
-        return new OrderResource($order->load(['items.product', 'user']));
+        return new OrderResource($order->load(['items.product', 'user', 'courier']));
     }
 }

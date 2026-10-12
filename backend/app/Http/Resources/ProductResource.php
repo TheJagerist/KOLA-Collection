@@ -19,6 +19,8 @@ class ProductResource extends JsonResource
             'ensemble' => $this->ensemble->value,
             'cat' => $this->cat->value,
             'sizes' => $this->sizes ?? [],
+            // Stock par taille ({"12": 4}) ; null = non suivi (toujours disponible)
+            'stock' => $this->stock === null ? null : (object) $this->stock,
             'niveaux' => $this->niveaux ?? [],
             'price' => $this->price,
             'description' => $this->description,

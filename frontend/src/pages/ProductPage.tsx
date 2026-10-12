@@ -11,7 +11,7 @@ import { cn } from '../lib/cn';
 import { Button, ButtonLink } from '../components/ui/Button';
 import { EmptyState, Skeleton } from '../components/ui/misc';
 import { ProductImage } from '../components/product/ProductImage';
-import { QtyStepper, SelectPill } from '../components/product/AddToCartDialog';
+import { QtyStepper, SelectPill, StockHint, stockLeft } from '../components/product/AddToCartDialog';
 import { FavoriteButton } from '../components/product/FavoriteButton';
 import { ProductCard } from '../components/product/ProductCard';
 
@@ -204,11 +204,12 @@ function ProductDetail({ product, related }: { product: Product; related: Produc
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {product.sizes.map((s) => (
-                <SelectPill key={s} active={size === s} onClick={() => setSize(s)}>
+                <SelectPill key={s} active={size === s} onClick={() => setSize(s)} disabled={stockLeft(product, s) === 0} title={stockLeft(product, s) === 0 ? 'Épuisé' : undefined}>
                   {s}
                 </SelectPill>
               ))}
             </div>
+            <StockHint product={product} size={size} />
             <ErrorLine show={touched && !size}>Choisissez une taille.</ErrorLine>
 
             <div className="label mt-6">Niveau scolaire</div>
@@ -222,7 +223,7 @@ function ProductDetail({ product, related }: { product: Product; related: Produc
             <ErrorLine show={touched && !niveau}>Choisissez le niveau scolaire.</ErrorLine>
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <QtyStepper value={qty} onChange={setQty} />
+              <QtyStepper value={qty} onChange={setQty} max={Math.min(20, (size && stockLeft(product, size)) || 20)} />
               <Button size="lg" variant={ready ? 'primary' : 'dark'} className="flex-1" onClick={submit}>
                 {label}
               </Button>

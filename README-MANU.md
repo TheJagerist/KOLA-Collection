@@ -75,14 +75,15 @@ Compte 2–4 minutes la première fois. Suivre l'avancement : `docker compose lo
 Par défaut le front tourne en **mode démo** (`VITE_API_MODE=mock`, données simulées dans le navigateur). Pour qu'il appelle ton API :
 ```bash
 cp .env.example .env          # à la racine du dépôt
-# mettre VITE_API_MODE=http dans .env
+# VITE_API_MODE=http est maintenant la valeur par défaut (mock = démo sans backend)
 docker compose up -d frontend
 ```
-👉 Aujourd'hui, en mode `http`, **tout le parcours client fonctionne** (accueil, catalogue, fiche, inscription, connexion, commande, suivi). Les pages **admin** affichent des erreurs tant que les endpoints admin ne sont pas codés (ils renvoient 501, voir §5).
+👉 En mode `http` (par défaut), **tout le site fonctionne sur la vraie base** : parcours client, profil, et tout le back-office (commandes, catalogue avec images, vitrine, carrousel, collections). Seule la connexion Google renvoie encore 501 (§5).
 
 ### Commandes utiles
 ```bash
 docker compose exec api php artisan migrate:fresh --seed   # repartir d'une base propre
+docker compose exec api php artisan kola:restore-catalogue  # remettre les articles d'origine supprimés (sans écraser les modifs)
 docker compose exec api php artisan test                    # tests (SQLite en mémoire, ne touche pas ta base)
 docker compose exec api php artisan route:list --path=api
 docker compose exec api php artisan tinker
@@ -109,7 +110,8 @@ backend/
 │   ├── Http/
 │   │   ├── Controllers/Api/   StorefrontController, ProductController, AuthController, OrderController ✅
 │   │   │   ├── GoogleAuthController                                                    🚧 (501)
-│   │   │   └── Admin/         Order, Collection, Homepage, Carousel, Product                🚧 (501)
+│   │   │   ├── ProfileController  profil, photo, mot de passe                                ✅
+│   │   │   └── Admin/         Order, Collection, Homepage, Carousel, Product                ✅ (Manu — tests : Admin/OrderAdminTest.php, AdminTest.php)
 │   │   ├── Middleware/EnsureUserIsAdmin   alias « admin »
 │   │   ├── Requests/          RegisterRequest, LoginRequest, StoreOrderRequest (messages FR)
 │   │   └── Resources/         User, Collection, HomepageContent, CarouselImage, Product, Order
@@ -178,23 +180,22 @@ Si tu dois changer un format de réponse : préviens Mulho et mettez à jour `do
 
 ## 5. Ce qu'il te reste à faire 🚧
 
-Les endpoints ci-dessous **existent déjà dans `routes/api.php`** et renvoient `501 Pas encore implémenté`. Chaque méthode de contrôleur contient en commentaire ce qu'elle doit faire. Ordre conseillé :
+> **Mise à jour (7 oct.)** : merci Manu pour le back-office admin (commits `ab145c0` → `5f907a9`) ✅ — il fonctionne avec le front, vérifié de bout en bout sur PostgreSQL. De mon côté (Mulho) : le **profil** (`PATCH /api/auth/me`, photo, mot de passe — `ProfileController`), la commande `kola:restore-catalogue`, des tests supplémentaires `tests/Feature/AdminTest.php` (30 tests au vert avec les tiens), et **une petite correction dans `CollectionController@store`** : créer deux collections du même nom provoquait une erreur SQL 500 (la règle `unique` comparait le *nom* à la colonne `slug`) → maintenant une erreur 422 « Une collection porte déjà ce nom. ». À noter aussi : `construction` est validé en `array` non nullable, donc vider toutes les lignes de construction d'un article ne l'enregistre pas — à passer en `nullable|array` si tu veux le permettre.
 
-### Priorité 1 — Back-office (bloque l'admin côté front)
-- [ ] **Commandes admin** — `Api/Admin/OrderController`
-  - `GET /api/admin/orders?status=` : toutes les commandes, récentes d'abord, `with('items.product', 'user')` (le champ `customer` apparaît alors).
-  - `PATCH /api/admin/orders/{order}` `{status}` : valider avec `Rule::enum(OrderStatus::class)` puis `$order->transitionTo(...)` (gère déjà `balance_paid` / `delivered_at`).
-- [ ] **Collections** — `Api/Admin/CollectionController` : liste, création (slug unique), activation via `$collection->activate()`.
-- [ ] **Contenu d'accueil** — `Api/Admin/HomepageController@update` : upsert pour la collection active, 409 si aucune.
-- [ ] **Carrousel** — `Api/Admin/CarouselController` : liste, upload multiple `images[]` (≤ 10 Mo, images seulement), suppression (+ fichier), réordonnancement `{ids: [...]}`.
-- [ ] **Produits** — `Api/Admin/ProductController` :
-  - liste (archivés compris) ; création / modification en **multipart** (`sizes[]`, `niveaux[]`, `construction[]`, `image`, `sketch`) — le front envoie la modification en `POST` + `_method=PUT` ;
-  - `DELETE` : **archive** si le produit a déjà été commandé (`{archived: true}`), sinon supprime vraiment (+ fichiers) ;
-  - `POST .../restore` : désarchive.
-  - Pense à créer des FormRequests dans `app/Http/Requests/Admin/`.
-- [ ] **Tests** pour chacun (exemples à copier dans `tests/Feature/OrderTest.php`, factories `->admin()` prêtes). Quand un endpoint est fait, mets à jour `test_google_and_admin_endpoints_not_yet_implemented...` dans `AuthTest`.
+> **Mise à jour (12 oct.) — fonctions d'administration avancées (Mulho)**. À relire quand tu peux 🙏 — 41 tests au vert (`tests/Feature/AdminFeaturesTest.php`).
+> - **Migration** `2026_10_08_000100_add_admin_features.php` : `products.stock`, `users.staff_role` / `admin_note`, colonnes de remise/livraison sur `orders`, tables `order_events`, `promo_codes`, `payments`.
+> - **Services** : `StockService`, `PromoService`, `OrderService::quote()` (+ `place()` qui gère stock, remise, historique et l'évènement `OrderPlaced`), `Services/Payments/*` (`FakeGateway`, `CinetPayGateway`, `PaymentService`).
+> - **Contrôleurs** : `Admin\OrderOpsController` (commande manuelle, historique, notes, livraison), `Admin\DeliveryController`, `Admin\CustomerController`, `Admin\TeamController`, `Admin\PromoController`, `Admin\StockController`, `PaymentController`. Middleware `EnsureStaffRole` (alias `staff`).
+> - **Ton code** : dans `Admin\OrderController` je n'ai touché qu'à **une chose** : ajout de `'courier'` dans les `load()` de `index` et `update` (le front affiche le livreur). `Order::transitionTo()` journalise maintenant le changement dans `order_events` et gère le stock.
+> - **Rôles** : gérant (tout), préparateur (commandes, clients, préparation, livraisons), livreur (ses livraisons). Comptes de démo : `prepa` / `kola1234`, `livreur` / `kola1234`.
+> - **À faire pour la prod** : compte **CinetPay** (`KOLA_PAYMENT_DRIVER=cinetpay`, `CINETPAY_SITE_ID`, `CINETPAY_API_KEY`), SMTP + `KOLA_NOTIFY_EMAILS` pour les e-mails, et passer les mails en queue.
 
-✅ *Critère de fin* : avec `VITE_API_MODE=http`, toutes les pages admin du front fonctionnent (commandes, catalogue, vitrine, collections).
+### ✅ Priorité 1 — Back-office : fait
+- [x] Commandes admin (liste + filtre `?status=`, changement de statut via `transitionTo()`)
+- [x] Collections (liste, création avec slug unique, activation)
+- [x] Contenu d'accueil (upsert sur la collection active, 409 si aucune)
+- [x] Carrousel (liste, upload multiple, suppression + fichier, réordonnancement)
+- [x] Produits (CRUD multipart, slug unique, remplacement d'images, archivage si déjà commandé, réactivation)
 
 ### Priorité 2 — Connexion Google
 - [ ] `composer require laravel/socialite`, configurer `config/services.php` (`google`) et `.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`).
@@ -204,20 +205,18 @@ Les endpoints ci-dessous **existent déjà dans `routes/api.php`** et renvoient 
 - [ ] Dans `App\Support\Media::store()` : redimensionner (≤ 1600 px) et convertir en **WebP** (GD est installé dans l'image Docker ; `intervention/image` conseillé). Les photos de l'ancien site faisaient jusqu'à 1,6 Mo.
 
 ### Priorité 4 — Paiement Mobile Money réel
-Aujourd'hui l'acompte est réglé « à la main » via WhatsApp et l'admin passe la commande en `validee`.
-- [ ] Choisir un agrégateur (ex. CinetPay, Flutterwave, ou les API directes MTN MoMo / Airtel Money).
-- [ ] Table `payments` (order_id, provider, montant, statut, référence opérateur, payload brut).
-- [ ] `POST /api/orders/{reference}/pay` (initie l'acompte) + **webhook** signé qui passe la commande en `validee` automatiquement.
-- [ ] Prévenir Mulho pour brancher l'écran de paiement côté front.
+- [x] Table `payments`, `POST /api/orders/{reference}/pay`, webhook `POST /api/payments/cinetpay/notify` (statut re-vérifié auprès de CinetPay), écran front + simulateur en dev.
+- [ ] Ouvrir le compte CinetPay, renseigner `CINETPAY_SITE_ID` / `CINETPAY_API_KEY`, tester en sandbox puis en réel.
 
 ### Priorité 5 — Notifications
-- [ ] Événement `OrderPlaced` (emplacement prévu en TODO dans `OrderService`) → notification à l'équipe (e-mail et/ou WhatsApp Business API) et au client.
+- [x] Événement `OrderPlaced` → e-mail à l'équipe (`KOLA_NOTIFY_EMAILS`) + alerte sonore dans le tableau de bord.
+- [ ] WhatsApp Business API pour l'équipe et le client.
 - [ ] Notification au client à chaque changement de statut (`validee`, `transit`, `livre`).
 - [ ] Passer ces envois en **queue** (`QUEUE_CONNECTION=database` est prêt ; ajouter un service `queue` dans `docker-compose.yml` avec `php artisan queue:work`).
 
 ### Priorité 6 — Comptes
 - [ ] Mot de passe oublié : par SMS (Africa's Talking / Twilio) ou par question à l'admin — à décider avec l'équipe.
-- [ ] `PATCH /api/auth/me` (modifier nom, téléphone) et changement de mot de passe.
+- [x] `PATCH /api/auth/me`, photo de profil, changement de mot de passe, déconnexion des autres appareils (fait).
 - [ ] Optionnel : profils enfants (prénom, taille, niveau) pour pré-remplir les commandes des parents.
 
 ### Priorité 7 — Mise en production
@@ -228,10 +227,12 @@ Aujourd'hui l'acompte est réglé « à la main » via WhatsApp et l'admin passe
 - [ ] Le front de prod se construit avec `docker build --target prod ./frontend` (Nginx + fallback SPA).
 
 ### Petits plus (quand tu as le temps)
+- [x] `GET /api/admin/customers` (+ fiche client, tailles habituelles, note interne).
+- [ ] (Plus tard) Envoi automatique du reçu WhatsApp via l'API WhatsApp Business (Meta Cloud API) quand l'admin valide un paiement. Aujourd'hui le reçu (PDF/image) est généré dans le navigateur et l'admin l'envoie lui-même depuis le tableau de bord (bouton WhatsApp).
 - [ ] Pagination sur `/api/admin/orders` (quand il y aura beaucoup de commandes) — prévenir Mulho, le front attend un tableau.
 - [ ] Recherche admin par référence / nom / téléphone côté serveur.
-- [ ] Export CSV des commandes.
-- [ ] Journal d'activité admin (qui a changé quel statut).
+- [x] Export CSV des commandes et des clients (fait côté front).
+- [x] Journal d'activité par commande (`order_events`).
 - [ ] Livraison : frais et zones si Kōlā sort de Brazzaville / Pointe-Noire (`App\Enums\DeliveryCity`).
 
 ---

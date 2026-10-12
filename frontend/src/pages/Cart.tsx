@@ -105,12 +105,19 @@ export function OrderSummary({
   balance,
   count,
   children,
+  subtotal,
+  discount,
+  discountLabel,
 }: {
   total: number;
   deposit: number;
   balance: number;
   count: number;
   children?: React.ReactNode;
+  /** Montant avant remise (si une remise s'applique) */
+  subtotal?: number;
+  discount?: number;
+  discountLabel?: string;
 }) {
   return (
     <aside className="h-fit rounded-[28px] bg-brun-900 p-6 text-creme-100 sm:p-7 lg:sticky lg:top-28">
@@ -120,8 +127,14 @@ export function OrderSummary({
           <dt className="text-creme-200/70">
             Sous-total ({count} article{count > 1 ? 's' : ''})
           </dt>
-          <dd>{fcfa(total)}</dd>
+          <dd>{fcfa(subtotal ?? total)}</dd>
         </div>
+        {!!discount && (
+          <div className="flex justify-between gap-3">
+            <dt className="text-emerald-300">{discountLabel ?? 'Remise'}</dt>
+            <dd className="shrink-0 text-emerald-300">− {fcfa(discount)}</dd>
+          </div>
+        )}
         <div className="flex justify-between">
           <dt className="text-creme-200/70">Livraison</dt>
           <dd className="text-emerald-300">Offerte</dd>

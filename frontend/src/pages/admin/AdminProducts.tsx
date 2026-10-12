@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Archive, ImagePlus, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, Boxes, ImagePlus, Pencil, Plus, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { api, ApiError, type Category, type Ensemble, type Niveau, type Product, type ProductInput } from '../../lib/api';
 import { qk, useAdminMutation } from '../../hooks/queries';
 import { CATEGORY_LABEL, ENSEMBLE_LABEL, fcfa, NIVEAU_LABEL } from '../../lib/format';
@@ -8,14 +8,15 @@ import { cn } from '../../lib/cn';
 import { Button } from '../../components/ui/Button';
 import { Input, Select, Textarea } from '../../components/ui/Field';
 import { Modal } from '../../components/ui/Modal';
-import { EmptyState, Skeleton } from '../../components/ui/misc';
+import { Chip, EmptyState, Skeleton } from '../../components/ui/misc';
+import { CellStack, Table, TableCard, Td, Th, THead, Tr, useSort } from '../../components/admin/DataTable';
 import { ProductImage } from '../../components/product/ProductImage';
-import { Panel } from './AdminLayout';
 
 export default function AdminProducts() {
   const { data, isLoading } = useQuery({ queryKey: qk.admin.products, queryFn: api.admin.listProducts });
   const [editing, setEditing] = useState<Product | 'new' | null>(null);
   const [toDelete, setToDelete] = useState<Product | null>(null);
+  const [stockOf, setStockOf] = useState<Product | null>(null);
 
   const del = useAdminMutation((id: number) => api.admin.deleteProduct(id), {
     success: (r) => (r.archived ? 'Article déjà commandé : archivé (historique conservé)' : 'Article supprimé'),
@@ -23,61 +24,171 @@ export default function AdminProducts() {
   });
   const restore = useAdminMutation((id: number) => api.admin.restoreProduct(id), { success: 'Article réactivé', invalidate: [qk.admin.products] });
 
+  const [view, setView] = useState<'actifs' | 'archives'>('actifs');
+  const [q, setQ] = useState('');
+  const [ens, setEns] = useState<Ensemble | 'tous'>('tous');
   const active = (data ?? []).filter((p) => !p.is_archived);
   const archived = (data ?? []).filter((p) => p.is_archived);
+  const base = view === 'actifs' ? active : archived;
+  const list = base.filter((p) => (ens === 'tous' || p.ensemble === ens) && (!q.trim() || p.name.toLowerCase().includes(q.trim().toLowerCase())));
+  const { sorted, by } = useSort(list, { key: 'name', dir: 'asc' }, { name: (p) => p.name, price: (p) => p.price, cat: (p) => CATEGORY_LABEL[p.cat] });
+
+  const actions = (p: Product, compact?: boolean) =>
+    p.is_archived ? (
+      <Button size="sm" variant="outline" icon={<RotateCcw className="size-3.5" />} loading={restore.isPending && restore.variables === p.id} onClick={() => restore.mutate(p.id)}>
+        Réactiver
+      </Button>
+    ) : (
+      <div className="flex items-center justify-end gap-1.5">
+        <button
+          onClick={() => setStockOf(p)}
+          className="grid size-9 place-items-center rounded-lg border border-line text-ink-soft transition hover:border-ink/25 hover:text-ink"
+          aria-label={`Stock de ${p.name}`}
+          title="Gérer le stock"
+        >
+          <Boxes className="size-4" />
+        </button>
+        <button onClick={() => setEditing(p)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-[12.5px] font-semibold text-ink transition hover:border-ink/25">
+          <Pencil className="size-3.5" /> {compact ? '' : 'Modifier'}
+        </button>
+        <button
+          onClick={() => setToDelete(p)}
+          className="grid size-9 place-items-center rounded-lg border border-line text-rouille-600 transition hover:border-rouille-500/40 hover:bg-rouille-50 dark:hover:bg-rouille-500/10"
+          aria-label={`Retirer ${p.name}`}
+          title="Retirer"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
+    );
 
   return (
-    <div className="space-y-6">
-      <Panel
-        title={`Catalogue (${active.length})`}
-        description="Articles de la collection active. Un article déjà commandé est archivé plutôt que supprimé, pour conserver l'historique."
-        actions={
-          <Button size="sm" icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>
-            Nouvel article
-          </Button>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="inline-flex gap-1 border-b border-line">
+          {(
+            [
+              ['actifs', 'En ligne', active.length],
+              ['archives', 'Archivés', archived.length],
+            ] as const
+          ).map(([id, label, n]) => (
+            <button
+              key={id}
+              onClick={() => setView(id)}
+              className={cn(
+                '-mb-px flex items-center gap-2 border-b-2 px-3 py-3 text-[13.5px] font-medium transition',
+                view === id ? 'border-rouille-500 text-ink' : 'border-transparent text-ink-muted hover:text-ink',
+              )}
+            >
+              {label}
+              <span className={cn('rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums', view === id ? 'bg-inverse text-on-inverse' : 'bg-surface-2 text-ink-muted')}>{n}</span>
+            </button>
+          ))}
+        </div>
+        <Button size="sm" icon={<Plus className="size-4" />} onClick={() => setEditing('new')}>
+          Nouvel article
+        </Button>
+      </div>
+
+      <TableCard
+        toolbar={
+          <>
+            <div className="relative w-full sm:w-72">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-muted" />
+              <input className="field h-10 py-0 pl-9" placeholder="Rechercher un article…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Rechercher un article" />
+            </div>
+            <div className="flex gap-1.5">
+              {(['tous', 'garcon', 'fille'] as const).map((e) => (
+                <Chip key={e} active={ens === e} onClick={() => setEns(e)} className="h-10">
+                  {e === 'tous' ? 'Tous' : ENSEMBLE_LABEL[e]}
+                </Chip>
+              ))}
+            </div>
+            <span className="ml-auto text-[13px] text-ink-muted max-sm:hidden">
+              {view === 'actifs' ? 'Visibles sur le site' : 'Masqués du site — historique conservé'}
+            </span>
+          </>
         }
       >
         {isLoading ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="space-y-2 p-5">
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-28" />
+              <Skeleton key={i} className="h-16" />
             ))}
           </div>
-        ) : active.length === 0 ? (
-          <EmptyState title="Aucun article" action={<Button onClick={() => setEditing('new')}>Ajouter un article</Button>}>
-            Cette collection est encore vide.
-          </EmptyState>
+        ) : sorted.length === 0 ? (
+          <div className="p-5">
+            <EmptyState title={view === 'actifs' ? 'Aucun article' : 'Aucun article archivé'} action={view === 'actifs' ? <Button onClick={() => setEditing('new')}>Ajouter un article</Button> : undefined}>
+              {q || ens !== 'tous' ? 'Aucun résultat pour ce filtre.' : view === 'actifs' ? 'Cette collection est encore vide.' : 'Les articles retirés après une commande apparaissent ici.'}
+            </EmptyState>
+          </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {active.map((p) => (
-              <ProductRow key={p.id} product={p}>
-                <Button size="sm" variant="outline" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(p)}>
-                  Modifier
-                </Button>
-                <Button size="sm" variant="danger" icon={<Trash2 className="size-3.5" />} onClick={() => setToDelete(p)}>
-                  Retirer
-                </Button>
-              </ProductRow>
-            ))}
-          </div>
+          <>
+            <div className="max-lg:hidden">
+              <Table>
+                <THead>
+                  <Th sort={by('name')}>Article</Th>
+                  <Th sort={by('cat')}>Type</Th>
+                  <Th>Tailles · stock</Th>
+                  <Th>Niveaux</Th>
+                  <Th align="right" sort={by('price')}>
+                    Prix
+                  </Th>
+                  <Th align="right">Actions</Th>
+                </THead>
+                <tbody>
+                  {sorted.map((p) => (
+                    <Tr key={p.id} className={cn(p.is_archived && 'opacity-70')}>
+                      <Td className="max-w-[320px]">
+                        <div className="flex items-center gap-3">
+                          <ProductImage product={p} className="size-12 shrink-0 rounded-xl" />
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-ink">{p.name}</div>
+                            {p.badge && <span className="mt-1 inline-block rounded-md bg-rouille-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-rouille-600 dark:bg-rouille-500/15">{p.badge}</span>}
+                          </div>
+                        </div>
+                      </Td>
+                      <Td>
+                        <div className="flex items-center gap-2">
+                          <span className={cn('size-2.5 rounded-full', p.ensemble === 'garcon' ? 'bg-kaki-400' : 'bg-ciel-400')} />
+                          <CellStack title={CATEGORY_LABEL[p.cat]} sub={ENSEMBLE_LABEL[p.ensemble]} />
+                        </div>
+                      </Td>
+                      <Td>
+                        <StockChips product={p} />
+                      </Td>
+                      <Td className="text-ink-soft">{p.niveaux.map((n) => NIVEAU_LABEL[n]).join(', ')}</Td>
+                      <Td align="right" className="font-semibold text-ink tabular-nums">
+                        {fcfa(p.price)}
+                      </Td>
+                      <Td align="right">{actions(p)}</Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            </div>
+            <ul className="divide-y divide-line/70 lg:hidden">
+              {sorted.map((p) => (
+                <li key={p.id} className={cn('flex items-center gap-3 px-4 py-3', p.is_archived && 'opacity-70')}>
+                  <ProductImage product={p} className="size-14 shrink-0 rounded-xl" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-ink">{p.name}</div>
+                    <div className="truncate text-[12px] text-ink-muted">
+                      {ENSEMBLE_LABEL[p.ensemble]} · {CATEGORY_LABEL[p.cat]}
+                    </div>
+                    <StockChips product={p} className="mt-1" />
+                    <div className="mt-0.5 text-[13.5px] font-semibold text-rouille-600">{fcfa(p.price)}</div>
+                  </div>
+                  {actions(p, true)}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
-      </Panel>
-
-      {archived.length > 0 && (
-        <Panel title={`Archivés (${archived.length})`} description="Masqués du catalogue public.">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {archived.map((p) => (
-              <ProductRow key={p.id} product={p} muted>
-                <Button size="sm" variant="outline" icon={<RotateCcw className="size-3.5" />} loading={restore.isPending && restore.variables === p.id} onClick={() => restore.mutate(p.id)}>
-                  Réactiver
-                </Button>
-              </ProductRow>
-            ))}
-          </div>
-        </Panel>
-      )}
+      </TableCard>
 
       <ProductFormModal product={editing} onClose={() => setEditing(null)} />
+      <StockModal product={stockOf} onClose={() => setStockOf(null)} />
 
       <Modal open={!!toDelete} onClose={() => setToDelete(null)} eyebrow="Catalogue" title="Retirer cet article ?">
         <p className="text-[15px] text-ink-soft">
@@ -92,22 +203,6 @@ export default function AdminProducts() {
           </Button>
         </div>
       </Modal>
-    </div>
-  );
-}
-
-function ProductRow({ product: p, muted, children }: { product: Product; muted?: boolean; children: React.ReactNode }) {
-  return (
-    <div className={cn('flex gap-4 rounded-2xl border border-line bg-surface p-3', muted && 'opacity-60')}>
-      <ProductImage product={p} className="size-24 shrink-0 rounded-xl" />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="truncate font-semibold">{p.name}</div>
-        <div className="text-[12.5px] text-ink-muted">
-          {ENSEMBLE_LABEL[p.ensemble]} · {CATEGORY_LABEL[p.cat]} · {p.sizes.join(', ')}
-        </div>
-        <div className="mt-0.5 text-[14px] font-semibold text-rouille-600">{fcfa(p.price)}</div>
-        <div className="mt-auto flex flex-wrap gap-1 pt-2">{children}</div>
-      </div>
     </div>
   );
 }
@@ -285,6 +380,115 @@ function FilePick({ label, file, current, onChange }: { label: string; file: Fil
         </span>
         <input type="file" accept="image/*" className="sr-only" onChange={(e) => onChange(e.target.files?.[0] ?? null)} />
       </label>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ STOCK PAR TAILLE */
+const LOW = 3;
+
+function StockChips({ product: p, className }: { product: Product; className?: string }) {
+  return (
+    <div className={cn('flex max-w-[260px] flex-wrap gap-1', className)}>
+      {p.sizes.map((sz) => {
+        const n = p.stock ? (p.stock[sz] ?? 0) : null;
+        return (
+          <span
+            key={sz}
+            title={n === null ? 'Stock non suivi' : `${n} en stock`}
+            className={cn(
+              'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] font-medium',
+              n === null ? 'border-line text-ink-soft' : n === 0 ? 'border-rouille-500/40 bg-rouille-50 text-rouille-600 line-through decoration-1 dark:bg-rouille-500/10' : n <= LOW ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300' : 'border-line text-ink-soft',
+            )}
+          >
+            {sz}
+            {n !== null && <span className="font-semibold tabular-nums no-underline opacity-80">{n}</span>}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function StockModal({ product, onClose }: { product: Product | null; onClose: () => void }) {
+  return (
+    <Modal open={!!product} onClose={onClose} eyebrow="Stock" title={product?.name}>
+      {product && <StockForm key={product.id} product={product} onDone={onClose} />}
+    </Modal>
+  );
+}
+
+function StockForm({ product: p, onDone }: { product: Product; onDone: () => void }) {
+  const [tracked, setTracked] = useState(p.stock != null);
+  const [qty, setQty] = useState<Record<string, number>>(() => Object.fromEntries(p.sizes.map((s) => [s, p.stock?.[s] ?? 0])));
+  const save = useAdminMutation(() => api.admin.setStock(p.id, tracked ? qty : null), {
+    success: 'Stock mis à jour',
+    invalidate: [qk.admin.products, qk.admin.lowStock],
+  });
+  const total = Object.values(qty).reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="space-y-5">
+      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-line p-3.5">
+        <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-rouille-500)]" checked={tracked} onChange={(e) => setTracked(e.target.checked)} />
+        <span>
+          <span className="block text-[14px] font-semibold text-ink">Suivre le stock de cet article</span>
+          <span className="block text-[12.5px] text-ink-muted">
+            Les tailles à 0 ne peuvent plus être commandées sur le site. Le stock baisse à chaque commande et remonte si elle est annulée.
+          </span>
+        </span>
+      </label>
+
+      <div className={cn('grid grid-cols-2 gap-2 sm:grid-cols-3', !tracked && 'pointer-events-none opacity-40')}>
+        {p.sizes.map((sz) => {
+          const n = qty[sz] ?? 0;
+          return (
+            <div key={sz} className={cn('rounded-2xl border p-3', n === 0 ? 'border-rouille-500/40' : n <= LOW ? 'border-amber-300 dark:border-amber-500/40' : 'border-line')}>
+              <div className="flex items-center justify-between text-[12px] text-ink-muted">
+                Taille <strong className="text-[15px] text-ink">{sz}</strong>
+              </div>
+              <div className="mt-2 flex items-center gap-1">
+                <button type="button" onClick={() => setQty((q) => ({ ...q, [sz]: Math.max(0, n - 1) }))} className="grid size-8 place-items-center rounded-lg border border-line text-ink-soft hover:text-ink" aria-label={`Retirer 1 taille ${sz}`}>
+                  −
+                </button>
+                <input
+                  type="number"
+                  min={0}
+                  max={9999}
+                  value={n}
+                  onChange={(e) => setQty((q) => ({ ...q, [sz]: Math.max(0, Math.min(9999, Number(e.target.value) || 0)) }))}
+                  className="field h-8 min-w-0 flex-1 px-1 py-0 text-center font-semibold tabular-nums"
+                  aria-label={`Stock taille ${sz}`}
+                />
+                <button type="button" onClick={() => setQty((q) => ({ ...q, [sz]: n + 1 }))} className="grid size-8 place-items-center rounded-lg border border-line text-ink-soft hover:text-ink" aria-label={`Ajouter 1 taille ${sz}`}>
+                  +
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {tracked && (
+        <div className="flex items-center gap-2 text-[12.5px] text-ink-muted">
+          <span>Total : <strong className="text-ink">{total}</strong> pièce(s)</span>
+          <span className="ml-auto">Réassort rapide :</span>
+          {[5, 10].map((n) => (
+            <button key={n} type="button" onClick={() => setQty((q) => Object.fromEntries(Object.entries(q).map(([k, v]) => [k, v + n])))} className="rounded-lg border border-line px-2 py-1 font-semibold text-ink hover:border-ink/25">
+              +{n} partout
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button variant="outline" onClick={onDone}>
+          Annuler
+        </Button>
+        <Button loading={save.isPending} onClick={() => save.mutate(undefined, { onSuccess: onDone })}>
+          Enregistrer le stock
+        </Button>
+      </div>
     </div>
   );
 }

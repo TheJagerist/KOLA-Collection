@@ -31,6 +31,7 @@ class StoreOrderRequest extends FormRequest
             'payment_phone' => ['required', 'regex:/^0\d{8}$/'],
             'delivery_city' => ['required', Rule::enum(DeliveryCity::class)],
             'delivery_address' => ['required', 'string', 'min:5', 'max:255'],
+            'promo_code' => ['nullable', 'string', 'max:40'],
         ];
     }
 

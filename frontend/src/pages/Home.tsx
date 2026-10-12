@@ -5,7 +5,7 @@ import { ArrowRight, ArrowUpRight, ChevronDown, CreditCard, Ruler, ShieldCheck, 
 import { useProducts, useStorefront } from '../hooks/queries';
 import { useAuth } from '../stores/auth';
 import { ButtonLink } from '../components/ui/Button';
-import { Chip } from '../components/ui/misc';
+import { Chip, ServerError } from '../components/ui/misc';
 import { WhatsAppIcon } from '../components/ui/icons';
 import { ProductCard, ProductCardSkeleton } from '../components/product/ProductCard';
 import type { Category } from '../lib/api/types';
@@ -318,7 +318,7 @@ function KeyFigures() {
 /* ================================================================ SÉLECTION */
 function Selection() {
   const [cat, setCat] = useState<Category | 'tout'>('tout');
-  const { data, isLoading } = useProducts({ sort: 'populaires' });
+  const { data, isLoading, isError, error, refetch } = useProducts({ sort: 'populaires' });
   const list = (data ?? []).filter((p) => cat === 'tout' || p.cat === cat).slice(0, 4);
 
   return (
@@ -349,7 +349,8 @@ function Selection() {
               </motion.div>
             ))}
       </motion.div>
-      {!isLoading && list.length === 0 && <p className="py-10 text-center text-ink-muted">Aucun article dans cette catégorie pour le moment.</p>}
+      {isError && <ServerError error={error} onRetry={() => refetch()} compact />}
+      {!isLoading && !isError && list.length === 0 && <p className="py-10 text-center text-ink-muted">Aucun article dans cette catégorie pour le moment.</p>}
 
       <div className="mt-12 flex justify-center">
         <ButtonLink to={cat === 'tout' ? '/catalogue' : `/catalogue?cat=${cat}`} variant="outline" className="group" icon={<ArrowRight className="order-last size-4 transition group-hover:translate-x-1" />}>

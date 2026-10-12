@@ -13,6 +13,14 @@ export const qk = {
     collections: ['admin', 'collections'] as const,
     carousel: ['admin', 'carousel'] as const,
     products: ['admin', 'products'] as const,
+    lowStock: ['admin', 'low-stock'] as const,
+    events: (id: number) => ['admin', 'events', id] as const,
+    couriers: ['admin', 'couriers'] as const,
+    deliveries: (courier?: number) => ['admin', 'deliveries', courier ?? 'all'] as const,
+    customers: ['admin', 'customers'] as const,
+    customer: (id: number) => ['admin', 'customer', id] as const,
+    team: ['admin', 'team'] as const,
+    promos: ['admin', 'promos'] as const,
   },
 };
 

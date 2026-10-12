@@ -11,6 +11,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { Socials } from './Footer';
 import { WhatsAppIcon } from '../ui/icons';
 import { contactWhatsAppLink } from '../../lib/whatsapp';
+import { Avatar } from '../ui/Avatar';
 import { cn } from '../../lib/cn';
 
 const NAV = [
@@ -138,7 +139,7 @@ export function Header() {
             </IconLink>
             <IconLink to={user ? '/compte' : '/connexion'} label={user ? 'Mon compte' : 'Se connecter'}>
               {user ? (
-                <span className="grid size-7 place-items-center rounded-full bg-rouille-500 text-[12px] font-bold text-white">{user.full_name.charAt(0).toUpperCase()}</span>
+                <Avatar user={user} className="size-7 text-[11px]" />
               ) : (
                 <UserRound className="size-[19px]" />
               )}

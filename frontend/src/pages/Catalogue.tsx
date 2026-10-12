@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { SlidersHorizontal, X, PackageSearch } from 'lucide-react';
 import { useProducts } from '../hooks/queries';
 import { ProductCard, ProductCardSkeleton } from '../components/product/ProductCard';
-import { Chip, EmptyState, PageHeader } from '../components/ui/misc';
+import { Chip, EmptyState, PageHeader, ServerError } from '../components/ui/misc';
 import { Button } from '../components/ui/Button';
 import type { Category, Ensemble, Niveau, ProductSort } from '../lib/api/types';
 import { cn } from '../lib/cn';
@@ -41,7 +41,7 @@ export default function Catalogue() {
     }),
     [params],
   );
-  const { data, isLoading } = useProducts(filters);
+  const { data, isLoading, isError, error, refetch } = useProducts(filters);
   const activeCount = filters.ensemble.length + filters.cat.length + filters.niveau.length;
 
   const toggle = (key: 'ensemble' | 'cat' | 'niveau', value: string) => {
@@ -135,12 +135,23 @@ export default function Catalogue() {
                 <ProductCardSkeleton key={i} />
               ))}
             </div>
+          ) : isError ? (
+            <ServerError error={error} onRetry={() => refetch()} />
           ) : data && data.length > 0 ? (
             <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:gap-x-6 xl:grid-cols-3">
               {data.map((p, i) => (
                 <ProductCard key={p.id} product={p} index={i} />
               ))}
             </div>
+          ) : activeCount === 0 ? (
+            <EmptyState icon={<PackageSearch className="size-6" />} title="Le catalogue arrive bientôt">
+              Les uniformes de la collection seront en ligne très vite.
+              {import.meta.env.DEV && (
+                <span className="mt-3 block font-mono text-[12.5px]">
+                  Dev : base sans articles → <strong>docker compose exec api php artisan kola:restore-catalogue</strong>
+                </span>
+              )}
+            </EmptyState>
           ) : (
             <EmptyState
               icon={<PackageSearch className="size-6" />}

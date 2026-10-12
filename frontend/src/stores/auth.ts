@@ -6,6 +6,8 @@ interface AuthState {
   status: 'idle' | 'loading' | 'ready';
   bootstrap: () => Promise<void>;
   signIn: (token: string, user: User) => void;
+  /** Après une modification du profil */
+  setUser: (user: User) => void;
   signOut: () => Promise<void>;
 }
 
@@ -26,6 +28,7 @@ export const useAuth = create<AuthState>((set) => ({
       set({ user: null, status: 'ready' });
     }
   },
+  setUser: (user) => set({ user }),
   signIn: (token, user) => {
     setToken(token);
     set({ user, status: 'ready' });

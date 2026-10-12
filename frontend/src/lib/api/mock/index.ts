@@ -5,17 +5,7 @@
  * pour que le frontend soit utilisable avant que l'API soit prête.
  * L'état est conservé dans le localStorage du navigateur.
  */
-import {
-  ApiError,
-  type AuthResponse,
-  type Category,
-  type KolaApi,
-  type Order,
-  type OrderStatus,
-  type Product,
-  type ProductInput,
-  type User,
-} from '../types';
+import { ApiError, type AuthResponse, type Category, type CreateOrderPayload, type CustomerSummary, type KolaApi, type Order, type OrderEvent, type OrderStatus, type PaymentInfo, type Product, type ProductInput, type Promo, type StaffMember, type StaffRole, type User } from '../types';
 import { getToken } from '../token';
 import { createSeed, SEED_VERSION, type MockDb, type MockUser } from './seed';
 
@@ -51,13 +41,28 @@ export function resetMockDb() {
 }
 
 const delay = (ms = 250 + Math.random() * 250) => new Promise((r) => setTimeout(r, ms));
-const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
 function publicUser(u: MockUser): User {
-  const { password: _pw, ...rest } = u;
+  const { password: _pw, admin_note: _n, ...rest } = u;
   void _pw;
-  return rest;
+  void _n;
+  return clone({
+    phone: null,
+    default_city: null,
+    default_address: null,
+    avatar_url: null,
+    ...rest,
+    has_password: !!u.password,
+  });
 }
+
+const blobToDataUrl = (b: Blob) =>
+  new Promise<string>((res) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.readAsDataURL(b);
+  });
 
 function currentUser(db: MockDb): MockUser {
   const token = getToken();
@@ -112,6 +117,180 @@ function fileToDataUrl(file: File): Promise<string> {
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/;
 const CATEGORIES: Category[] = ['chemise', 'pantalon', 'jupe'];
 
+/* ------------------------------------------------------------------ Règles métier partagées (miroir de Laravel) */
+type DbOrder = MockDb['orders'][number];
+const staffRoleOf = (u: MockUser): StaffRole | null => (u.is_admin ? (u.staff_role ?? 'gerant') : null);
+
+function requireRole(db: MockDb, ...roles: StaffRole[]): MockUser {
+  const user = requireAdmin(db);
+  if (!roles.includes(staffRoleOf(user)!)) throw new ApiError('Votre rôle ne permet pas cette action.', 403);
+  return user;
+}
+
+function logEvent(db: MockDb, orderId: number, type: OrderEvent['type'], extra: Partial<OrderEvent> = {}, by?: MockUser | null): OrderEvent {
+  const ev = {
+    id: db.seq.event++,
+    order_id: orderId,
+    type,
+    from_status: null,
+    to_status: null,
+    body: null,
+    created_at: new Date().toISOString(),
+    user: by ? { id: by.id, full_name: by.full_name, is_staff: by.is_admin } : null,
+    ...extra,
+  };
+  db.events.push(ev);
+  const { order_id: _o, ...rest } = ev;
+  void _o;
+  return rest;
+}
+
+function promoUsable(p: Promo) {
+  const now = Date.now();
+  return p.is_active && (!p.starts_at || Date.parse(p.starts_at) <= now) && (!p.ends_at || Date.parse(p.ends_at) >= now) && (p.max_uses === null || p.uses < p.max_uses);
+}
+function promoDiscount(p: Promo, subtotal: number, count: number) {
+  if (count < p.min_items || subtotal < p.min_total) return 0;
+  return Math.min(p.type === 'percent' ? Math.round((subtotal * p.value) / 100) : p.value, subtotal);
+}
+function bestPromo(db: MockDb, subtotal: number, count: number, code?: string | null) {
+  let best: { discount: number; promo: Promo | null } = { discount: 0, promo: null };
+  db.promos.filter((p) => p.code === null && promoUsable(p)).forEach((p) => {
+    const d = promoDiscount(p, subtotal, count);
+    if (d > best.discount) best = { discount: d, promo: p };
+  });
+  const c = code?.trim().toUpperCase();
+  if (c) {
+    const p = db.promos.find((x) => x.code === c && promoUsable(x));
+    if (!p) validation({ promo_code: `Le code « ${c} » n'est pas valide ou a expiré.` });
+    const d = promoDiscount(p, subtotal, count);
+    if (d === 0) validation({ promo_code: `Le code « ${c} » s'applique ${p.min_items > count ? `dès ${p.min_items} articles` : `dès ${p.min_total.toLocaleString('fr-FR')} FCFA`}.` });
+    if (d >= best.discount) best = { discount: d, promo: p };
+  }
+  return best;
+}
+
+function buildLines(db: MockDb, items: CreateOrderPayload['items'], checkStock = true) {
+  const need = new Map<string, number>();
+  const lines = items.map((line, i) => {
+    const p = db.products.find((x) => x.id === line.product_id && !x.is_archived);
+    if (!p) validation({ [`items.${i}.product_id`]: 'Un article de votre panier n’est plus disponible.' });
+    if (!p.sizes.includes(line.size)) validation({ [`items.${i}.size`]: `Taille ${line.size} indisponible pour ${p.name}.` });
+    if (line.qty < 1 || line.qty > 50) validation({ [`items.${i}.qty`]: 'Quantité invalide.' });
+    const key = `${p.id}|${line.size}`;
+    need.set(key, (need.get(key) ?? 0) + line.qty);
+    if (checkStock && p.stock) {
+      const left = Math.max(0, p.stock[line.size] ?? 0);
+      if (left < need.get(key)!) validation({ [`items.${i}.qty`]: left === 0 ? `« ${p.name} » est épuisé en taille ${line.size}.` : `Il ne reste que ${left} « ${p.name} » en taille ${line.size}.` });
+    }
+    return { product_id: p.id, product_name: p.name, product_image_url: p.image_url, size: line.size, niveau: line.niveau, qty: line.qty, unit_price: p.price, line_total: p.price * line.qty };
+  });
+  return lines;
+}
+
+function adjustStock(db: MockDb, items: { product_id: number; size: string; qty: number }[], sign: 1 | -1) {
+  items.forEach((i) => {
+    const p = db.products.find((x) => x.id === i.product_id);
+    if (p?.stock) p.stock[i.size] = Math.max(0, (p.stock[i.size] ?? 0) + sign * i.qty);
+  });
+}
+
+function quoteOf(db: MockDb, items: CreateOrderPayload['items'], code?: string | null) {
+  const lines = buildLines(db, items);
+  const subtotal = lines.reduce((s, l) => s + l.line_total, 0);
+  const count = lines.reduce((s, l) => s + l.qty, 0);
+  const { discount, promo } = bestPromo(db, subtotal, count, code);
+  const total = subtotal - discount;
+  const deposit = Math.round(total * 0.5);
+  return { lines, subtotal, discount, total, deposit, balance: total - deposit, items_count: count, promo };
+}
+
+function placeOrder(db: MockDb, user: MockUser, payload: CreateOrderPayload, meta: { source?: 'web' | 'manuel'; by?: MockUser } = {}): DbOrder {
+  if (!payload.items.length) validation({ items: 'Le panier est vide.' });
+  if (!['airtel', 'mtn'].includes(payload.payment_method)) validation({ payment_method: 'Choisissez un opérateur.' });
+  if (!/^0[0-9]{8}$/.test(payload.payment_phone)) validation({ payment_phone: 'Numéro invalide (9 chiffres, ex. 06 123 45 67).' });
+  if (!payload.delivery_city) validation({ delivery_city: 'Choisissez une ville de livraison.' });
+  if (payload.delivery_address.trim().length < 3) validation({ delivery_address: "Précisez l'adresse de livraison." });
+  const q = quoteOf(db, payload.items, payload.promo_code);
+  adjustStock(db, q.lines, -1);
+  q.lines.forEach((l) => {
+    const p = db.products.find((x) => x.id === l.product_id);
+    if (p) p.order_count += l.qty;
+  });
+  if (q.promo) q.promo.uses++;
+  const order: DbOrder = {
+    id: db.seq.order++,
+    user_id: user.id,
+    reference: reference(),
+    status: 'en_attente',
+    subtotal: q.subtotal,
+    discount: q.discount,
+    promo_code: q.promo?.code ?? null,
+    promo_label: q.promo?.label ?? null,
+    source: meta.source ?? 'web',
+    total: q.total,
+    deposit: q.deposit,
+    balance: q.balance,
+    balance_paid: false,
+    payment_method: payload.payment_method,
+    payment_phone: payload.payment_phone,
+    delivery_city: payload.delivery_city,
+    delivery_address: payload.delivery_address.trim(),
+    items: q.lines,
+    customer: { id: user.id, full_name: user.full_name, username: user.username },
+    courier: null,
+    delivery_date: null,
+    delivery_slot: null,
+    deposit_paid_at: null,
+    created_at: new Date().toISOString(),
+    delivered_at: null,
+  };
+  db.orders.unshift(order);
+  logEvent(db, order.id, 'created', { to_status: 'en_attente', body: meta.source === 'manuel' ? 'Commande saisie par l’équipe' : null }, meta.by ?? user);
+  return order;
+}
+
+function transition(db: MockDb, o: DbOrder, status: OrderStatus, by: MockUser | null, note: string | null = null) {
+  const from = o.status;
+  if (from === status) return;
+  o.status = status;
+  o.balance_paid = status === 'livre';
+  o.delivered_at = status === 'livre' ? new Date().toISOString() : null;
+  if (from === 'en_attente' && status !== 'annulee' && !o.deposit_paid_at) o.deposit_paid_at = new Date().toISOString();
+  if (status === 'en_attente') o.deposit_paid_at = null;
+  if (status === 'annulee') adjustStock(db, o.items, 1);
+  else if (from === 'annulee') adjustStock(db, o.items, -1);
+  logEvent(db, o.id, 'status', { from_status: from, to_status: status, body: note }, by);
+}
+
+function customerSummary(db: MockDb, u: MockUser): CustomerSummary {
+  const orders = db.orders.filter((o) => o.user_id === u.id);
+  const last = orders.map((o) => o.created_at).sort().pop() ?? null;
+  return {
+    id: u.id,
+    full_name: u.full_name,
+    username: u.username,
+    email: u.email,
+    phone: u.phone ?? null,
+    avatar_url: u.avatar_url ?? null,
+    city: u.default_city ?? orders.find((o) => o.created_at === last)?.delivery_city ?? null,
+    admin_note: u.admin_note ?? null,
+    has_account: !!u.password,
+    orders_count: orders.length,
+    total_spent: orders.filter((o) => o.status !== 'annulee').reduce((s, o) => s + o.total, 0),
+    pending_count: orders.filter((o) => o.status === 'en_attente').length,
+    last_order_at: last,
+    created_at: u.created_at,
+  };
+}
+
+const staffOf = (u: MockUser): StaffMember => ({ id: u.id, full_name: u.full_name, username: u.username, phone: u.phone ?? null, avatar_url: u.avatar_url ?? null, staff_role: staffRoleOf(u)!, created_at: u.created_at });
+
+function keepOneManager(db: MockDb, u: MockUser) {
+  if (staffRoleOf(u) !== 'gerant') return;
+  if (db.users.filter((x) => staffRoleOf(x) === 'gerant').length <= 1) throw new ApiError("Il doit rester au moins un gérant dans l'équipe.", 422);
+}
+
 function stripOrder(o: Order & { user_id: number }): Order {
   const { user_id: _u, ...rest } = o;
   void _u;
@@ -140,11 +319,7 @@ export const mockApi: KolaApi = {
     if (filters.niveau?.length) list = list.filter((p) => p.niveaux.some((n) => filters.niveau!.includes(n)));
     const sort = filters.sort ?? 'populaires';
     list = [...list].sort((a, b) =>
-      sort === 'prix'
-        ? a.price - b.price
-        : sort === 'nouveautes'
-          ? +new Date(b.created_at) - +new Date(a.created_at)
-          : b.order_count - a.order_count,
+      sort === 'prix' ? a.price - b.price : sort === 'nouveautes' ? +new Date(b.created_at) - +new Date(a.created_at) : b.order_count - a.order_count,
     );
     return clone(list);
   },
@@ -162,8 +337,14 @@ export const mockApi: KolaApi = {
     const db = load();
     const username = payload.username.trim().toLowerCase();
     if (!payload.full_name.trim()) validation({ full_name: 'Le nom est obligatoire.' });
-    if (!USERNAME_RE.test(username)) validation({ username: "Nom d'utilisateur invalide (3 à 20 caractères : lettres, chiffres, . _ -)." });
-    if (payload.password.length < 8) validation({ password: 'Le mot de passe doit contenir au moins 8 caractères.' });
+    if (!USERNAME_RE.test(username))
+      validation({
+        username: "Nom d'utilisateur invalide (3 à 20 caractères : lettres, chiffres, . _ -).",
+      });
+    if (payload.password.length < 8)
+      validation({
+        password: 'Le mot de passe doit contenir au moins 8 caractères.',
+      });
     if (db.users.some((u) => u.username === username)) validation({ username: "Ce nom d'utilisateur est déjà pris." });
     const user: MockUser = {
       id: db.seq.user++,
@@ -177,7 +358,10 @@ export const mockApi: KolaApi = {
     };
     db.users.push(user);
     save(db);
-    return { token: `mock-${user.id}-${Date.now()}`, user: publicUser(user) } satisfies AuthResponse;
+    return {
+      token: `mock-${user.id}-${Date.now()}`,
+      user: publicUser(user),
+    } satisfies AuthResponse;
   },
 
   async login(payload) {
@@ -203,54 +387,101 @@ export const mockApi: KolaApi = {
     return '#google-indisponible-en-mode-mock';
   },
 
+  async updateProfile(input) {
+    await delay();
+    const db = load();
+    const user = currentUser(db);
+    const errors: Record<string, string> = {};
+    const next = { ...input };
+    if (next.full_name !== undefined) {
+      next.full_name = next.full_name.trim();
+      if (!next.full_name) errors.full_name = 'Le nom est obligatoire.';
+    }
+    if (next.username !== undefined) {
+      next.username = (next.username ?? '').trim().toLowerCase();
+      if (!USERNAME_RE.test(next.username)) errors.username = "Nom d'utilisateur invalide : 3 à 20 caractères (lettres, chiffres, point, tiret ou underscore).";
+      else if (db.users.some((u) => u.username === next.username && u.id !== user.id)) errors.username = "Ce nom d'utilisateur est déjà pris.";
+    }
+    if (next.email !== undefined) {
+      next.email = next.email?.trim() || null;
+      if (next.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(next.email)) errors.email = 'Adresse e-mail invalide.';
+      else if (next.email && db.users.some((u) => u.email === next.email && u.id !== user.id)) errors.email = 'Cette adresse e-mail est déjà utilisée.';
+    }
+    if (next.phone !== undefined) {
+      const d = (next.phone ?? '').replace(/\D/g, '').replace(/^242/, '');
+      next.phone = d || null;
+      if (d && !/^0\d{8}$/.test(d)) errors.phone = 'Numéro invalide : 9 chiffres commençant par 0 (ex. 06 444 55 66).';
+    }
+    if (next.default_city && !['Brazzaville', 'Pointe-Noire'].includes(next.default_city)) errors.default_city = 'Ville non desservie.';
+    if (Object.keys(errors).length) validation(errors);
+    Object.assign(user, next);
+    // Le nom affiché sur les commandes suit le profil
+    db.orders.forEach((o) => {
+      if (o.user_id === user.id)
+        o.customer = {
+          id: user.id,
+          full_name: user.full_name,
+          username: user.username,
+        };
+    });
+    save(db);
+    return publicUser(user);
+  },
+
+  async uploadAvatar(file) {
+    await delay();
+    const db = load();
+    const user = currentUser(db);
+    if (file.size > 3 * 1024 * 1024) validation({ avatar: 'La photo ne doit pas dépasser 3 Mo.' });
+    (user as MockUser & { avatar_url?: string | null }).avatar_url = await blobToDataUrl(file);
+    save(db);
+    return publicUser(user);
+  },
+
+  async deleteAvatar() {
+    await delay();
+    const db = load();
+    const user = currentUser(db);
+    (user as MockUser & { avatar_url?: string | null }).avatar_url = null;
+    save(db);
+    return publicUser(user);
+  },
+
+  async updatePassword(input) {
+    await delay();
+    const db = load();
+    const user = currentUser(db);
+    if (user.password && input.current_password !== user.password) validation({ current_password: 'Le mot de passe actuel est incorrect.' });
+    if (input.password.length < 8)
+      validation({
+        password: 'Le mot de passe doit contenir au moins 8 caractères.',
+      });
+    if (input.password !== input.password_confirmation) validation({ password: 'Les deux mots de passe ne correspondent pas.' });
+    if (input.password === input.current_password)
+      validation({
+        password: "Le nouveau mot de passe doit être différent de l'actuel.",
+      });
+    user.password = input.password;
+    save(db);
+  },
+
+  async logoutOthers() {
+    await delay();
+    return { revoked: 0 };
+  },
+
+  async quote(items, promoCode) {
+    await delay(200);
+    const db = load();
+    const q = quoteOf(db, items, promoCode);
+    return { subtotal: q.subtotal, discount: q.discount, total: q.total, deposit: q.deposit, balance: q.balance, items_count: q.items_count, promo: q.promo ? { code: q.promo.code, label: q.promo.label } : null };
+  },
+
   async createOrder(payload) {
     await delay(600);
     const db = load();
     const user = currentUser(db);
-    if (!payload.items.length) validation({ items: 'Le panier est vide.' });
-    if (!['airtel', 'mtn'].includes(payload.payment_method)) validation({ payment_method: 'Choisissez un opérateur.' });
-    if (!/^0[0-9]{8}$/.test(payload.payment_phone)) validation({ payment_phone: 'Numéro invalide (9 chiffres, ex. 06 123 45 67).' });
-    if (!payload.delivery_city) validation({ delivery_city: 'Choisissez une ville de livraison.' });
-    if (payload.delivery_address.trim().length < 5) validation({ delivery_address: "Précisez l'adresse de livraison." });
-
-    const items = payload.items.map((line, i) => {
-      const p = db.products.find((x) => x.id === line.product_id && !x.is_archived);
-      if (!p) validation({ [`items.${i}.product_id`]: 'Un article de votre panier n’est plus disponible.' });
-      if (!p.sizes.includes(line.size)) validation({ [`items.${i}.size`]: `Taille ${line.size} indisponible pour ${p.name}.` });
-      if (line.qty < 1 || line.qty > 20) validation({ [`items.${i}.qty`]: 'Quantité invalide.' });
-      p.order_count += line.qty;
-      return {
-        product_id: p.id,
-        product_name: p.name,
-        product_image_url: p.image_url,
-        size: line.size,
-        niveau: line.niveau,
-        qty: line.qty,
-        unit_price: p.price,
-        line_total: p.price * line.qty,
-      };
-    });
-    const total = items.reduce((s, l) => s + l.line_total, 0);
-    const deposit = Math.round(total * 0.5);
-    const order = {
-      id: db.seq.order++,
-      user_id: user.id,
-      reference: reference(),
-      status: 'en_attente' as OrderStatus,
-      total,
-      deposit,
-      balance: total - deposit,
-      balance_paid: false,
-      payment_method: payload.payment_method,
-      payment_phone: payload.payment_phone,
-      delivery_city: payload.delivery_city,
-      delivery_address: payload.delivery_address.trim(),
-      items,
-      customer: { id: user.id, full_name: user.full_name, username: user.username },
-      created_at: new Date().toISOString(),
-      delivered_at: null,
-    };
-    db.orders.unshift(order);
+    const order = placeOrder(db, user, payload);
     save(db);
     return stripOrder(order);
   },
@@ -271,6 +502,58 @@ export const mockApi: KolaApi = {
     return stripOrder(o);
   },
 
+  payments: {
+    async config() {
+      return { enabled: true, driver: 'fake' };
+    },
+    async start(ref, kind = 'deposit') {
+      await delay();
+      const db = load();
+      const user = currentUser(db);
+      const o = db.orders.find((x) => x.reference === ref && x.user_id === user.id);
+      if (!o) throw new ApiError('Commande introuvable.', 404);
+      if (kind === 'deposit' && o.status !== 'en_attente') validation({ payment: 'L’acompte de cette commande est déjà réglé.' });
+      if (kind === 'balance' && (o.balance_paid || !['validee', 'transit'].includes(o.status))) validation({ payment: 'Le solde ne peut pas être réglé pour cette commande.' });
+      const tx = `KOLA${Date.now().toString(36).toUpperCase()}`;
+      const amount = kind === 'deposit' ? o.deposit : o.balance;
+      db.payments.push({ order_id: o.id, transaction_id: tx, kind, amount, status: 'pending', reference: o.reference, paid_at: null });
+      save(db);
+      return { transaction_id: tx, amount, url: `/paiement/simulateur/${tx}?retour=${encodeURIComponent(`/commande/confirmation/${o.reference}?paiement=${tx}`)}` };
+    },
+    async status(tx) {
+      await delay(200);
+      const db = load();
+      const p = db.payments.find((x) => x.transaction_id === tx);
+      if (!p) throw new ApiError('Paiement introuvable.', 404);
+      const { order_id: _o, ...rest } = p;
+      void _o;
+      return rest;
+    },
+    async fakeComplete(tx, success) {
+      await delay(500);
+      const db = load();
+      const user = currentUser(db);
+      const p = db.payments.find((x) => x.transaction_id === tx);
+      if (!p) throw new ApiError('Paiement introuvable.', 404);
+      if (p.status === 'pending') {
+        p.status = success ? 'success' : 'failed';
+        p.paid_at = success ? new Date().toISOString() : null;
+        const o = db.orders.find((x) => x.id === p.order_id)!;
+        const amount = `${p.amount.toLocaleString('fr-FR')} FCFA`;
+        if (!success) logEvent(db, o.id, 'payment', { body: `Paiement Mobile Money échoué (${amount})` }, user);
+        else if (p.kind === 'deposit' && o.status === 'en_attente') transition(db, o, 'validee', user, `Acompte de ${amount} payé en ligne (simulation)`);
+        else {
+          o.balance_paid = true;
+          logEvent(db, o.id, 'payment', { body: `Solde de ${amount} payé en ligne (simulation)` }, user);
+        }
+        save(db);
+      }
+      const { order_id: _o, ...rest } = p as PaymentInfo & { order_id: number };
+      void _o;
+      return rest;
+    },
+  },
+
   admin: {
     async listOrders(status) {
       await delay();
@@ -282,14 +565,271 @@ export const mockApi: KolaApi = {
     async updateOrderStatus(id, status) {
       await delay();
       const db = load();
-      requireAdmin(db);
+      const by = requireRole(db, 'gerant', 'preparateur');
       const o = db.orders.find((x) => x.id === id);
       if (!o) throw new ApiError('Commande introuvable.', 404);
-      o.status = status;
-      o.balance_paid = status === 'livre';
-      o.delivered_at = status === 'livre' ? new Date().toISOString() : null;
+      transition(db, o, status, by);
       save(db);
       return stripOrder(o);
+    },
+
+    async setStock(id, stock) {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant');
+      const p = db.products.find((x) => x.id === id);
+      if (!p) throw new ApiError('Article introuvable.', 404);
+      p.stock = stock ? Object.fromEntries(p.sizes.map((sz) => [sz, Math.max(0, Math.floor(Number(stock[sz] ?? 0)))])) : null;
+      save(db);
+      return clone(p);
+    },
+
+    async lowStock() {
+      await delay(200);
+      const db = load();
+      requireRole(db, 'gerant', 'preparateur');
+      const coll = activeCollection(db);
+      return db.products
+        .filter((p) => p.collection_id === coll?.id && !p.is_archived && p.stock)
+        .flatMap((p) => p.sizes.map((size) => ({ product_id: p.id, name: p.name, image_url: p.image_url, size, qty: Math.max(0, p.stock![size] ?? 0) })))
+        .filter((r) => r.qty <= 3)
+        .sort((a, b) => a.qty - b.qty);
+    },
+
+    async createOrder(payload) {
+      await delay(600);
+      const db = load();
+      const by = requireRole(db, 'gerant', 'preparateur');
+      let customer = payload.customer_id ? db.users.find((u) => u.id === payload.customer_id && !u.is_admin) : undefined;
+      if (!customer && payload.customer) {
+        const phone = payload.customer.phone.replace(/\D/g, '').replace(/^242/, '');
+        if (!payload.customer.full_name.trim()) validation({ 'customer.full_name': 'Indiquez le nom du client.' });
+        if (!/^0\d{8}$/.test(phone)) validation({ 'customer.phone': 'Téléphone invalide : 9 chiffres, ex. 06 123 45 67.' });
+        customer = db.users.find((u) => !u.is_admin && u.phone === phone);
+        if (!customer) {
+          customer = { id: db.seq.user++, full_name: payload.customer.full_name.trim(), username: null, email: null, role: 'parent', is_admin: false, phone, created_at: new Date().toISOString(), password: '' };
+          db.users.push(customer);
+        }
+      }
+      if (!customer) validation({ 'customer.full_name': 'Choisissez ou créez un client.' });
+      const o = placeOrder(db, customer, { ...payload, promo_code: payload.promo_code ?? null }, { source: 'manuel', by });
+      if (payload.deposit_received) transition(db, o, 'validee', by, 'Acompte reçu à la prise de commande');
+      save(db);
+      return stripOrder(o);
+    },
+
+    async orderEvents(id) {
+      await delay(200);
+      const db = load();
+      requireRole(db, 'gerant', 'preparateur');
+      return db.events
+        .filter((e) => e.order_id === id)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)
+        .map(({ order_id: _o, ...e }) => (void _o, e));
+    },
+
+    async addOrderNote(id, body) {
+      await delay(250);
+      const db = load();
+      const by = requireRole(db, 'gerant', 'preparateur');
+      if (!body.trim()) validation({ body: 'La note est vide.' });
+      const ev = logEvent(db, id, 'note', { body: body.trim() }, by);
+      save(db);
+      return ev;
+    },
+
+    async setDelivery(id, input) {
+      await delay();
+      const db = load();
+      const by = requireRole(db, 'gerant', 'preparateur');
+      const o = db.orders.find((x) => x.id === id);
+      if (!o) throw new ApiError('Commande introuvable.', 404);
+      const c = input.courier_id ? db.users.find((u) => u.id === input.courier_id && u.is_admin) : null;
+      o.courier = c ? { id: c.id, full_name: c.full_name, phone: c.phone ?? null } : null;
+      o.delivery_date = input.delivery_date;
+      o.delivery_slot = input.delivery_slot;
+      const date = o.delivery_date ? `le ${new Date(o.delivery_date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}` : null;
+      logEvent(db, o.id, 'delivery', { body: [c ? `Livreur : ${c.full_name}` : 'Livreur retiré', date, o.delivery_slot].filter(Boolean).join(' · ') }, by);
+      save(db);
+      return stripOrder(o);
+    },
+
+    async couriers() {
+      await delay(200);
+      const db = load();
+      requireRole(db, 'gerant', 'preparateur');
+      return db.users.filter((u) => ['livreur', 'gerant'].includes(staffRoleOf(u) ?? '')).map((u) => ({ id: u.id, full_name: u.full_name, phone: u.phone ?? null, staff_role: staffRoleOf(u)! }));
+    },
+
+    async deliveries(courierId) {
+      await delay();
+      const db = load();
+      const me = requireAdmin(db);
+      const mine = staffRoleOf(me) === 'livreur';
+      const today = new Date().toISOString().slice(0, 10);
+      return db.orders
+        .filter((o) => ['validee', 'transit'].includes(o.status) || (o.status === 'livre' && (o.delivered_at ?? '').slice(0, 10) === today))
+        .filter((o) => (mine ? o.courier?.id === me.id : !courierId || o.courier?.id === courierId))
+        .map(stripOrder);
+    },
+
+    async startDelivery(id) {
+      await delay();
+      const db = load();
+      const me = requireAdmin(db);
+      const o = db.orders.find((x) => x.id === id);
+      if (!o) throw new ApiError('Commande introuvable.', 404);
+      if (staffRoleOf(me) === 'livreur' && o.courier?.id !== me.id) throw new ApiError('Cette livraison est confiée à un autre livreur.', 403);
+      if (o.status !== 'validee') throw new ApiError('Seule une commande validée peut partir en livraison.', 422);
+      transition(db, o, 'transit', me, 'Départ en livraison');
+      save(db);
+      return stripOrder(o);
+    },
+
+    async markDelivered(id, note) {
+      await delay();
+      const db = load();
+      const me = requireAdmin(db);
+      const o = db.orders.find((x) => x.id === id);
+      if (!o) throw new ApiError('Commande introuvable.', 404);
+      if (staffRoleOf(me) === 'livreur' && o.courier?.id !== me.id) throw new ApiError('Cette livraison est confiée à un autre livreur.', 403);
+      if (!['validee', 'transit'].includes(o.status)) throw new ApiError('Cette commande ne peut pas être marquée livrée.', 422);
+      transition(db, o, 'livre', me, note || 'Remise au client, solde encaissé');
+      save(db);
+      return stripOrder(o);
+    },
+
+    async customers() {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant', 'preparateur');
+      return db.users
+        .filter((u) => !u.is_admin)
+        .map((u) => customerSummary(db, u))
+        .sort((a, b) => (b.last_order_at ?? '').localeCompare(a.last_order_at ?? ''));
+    },
+
+    async customer(id) {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant', 'preparateur');
+      const u = db.users.find((x) => x.id === id && !x.is_admin);
+      if (!u) throw new ApiError('Client introuvable.', 404);
+      const orders = db.orders.filter((o) => o.user_id === u.id);
+      const sizes = new Map<string, { cat: Category | 'article'; size: string; qty: number }>();
+      orders
+        .filter((o) => o.status !== 'annulee')
+        .flatMap((o) => o.items)
+        .forEach((i) => {
+          const cat = db.products.find((p) => p.id === i.product_id)?.cat ?? 'article';
+          const k = `${cat}|${i.size}`;
+          sizes.set(k, { cat, size: i.size, qty: (sizes.get(k)?.qty ?? 0) + i.qty });
+        });
+      return { ...customerSummary(db, u), usual_sizes: [...sizes.values()].sort((a, b) => b.qty - a.qty), orders: orders.map(stripOrder) };
+    },
+
+    async updateCustomerNote(id, note) {
+      await delay(250);
+      const db = load();
+      requireRole(db, 'gerant', 'preparateur');
+      const u = db.users.find((x) => x.id === id && !x.is_admin);
+      if (!u) throw new ApiError('Client introuvable.', 404);
+      u.admin_note = note?.trim() || null;
+      save(db);
+      return { id, admin_note: u.admin_note };
+    },
+
+    async team() {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant');
+      return db.users.filter((u) => u.is_admin).map(staffOf);
+    },
+
+    async createStaff(input) {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant');
+      const username = (input.username ?? '').trim().toLowerCase();
+      if (!input.full_name?.trim()) validation({ full_name: 'Le nom est obligatoire.' });
+      if (!USERNAME_RE.test(username)) validation({ username: "Nom d'utilisateur : 3 à 20 caractères (lettres, chiffres, . _ -)." });
+      if (db.users.some((u) => u.username === username)) validation({ username: "Ce nom d'utilisateur est déjà pris." });
+      if ((input.password ?? '').length < 8) validation({ password: 'Au moins 8 caractères.' });
+      const u: MockUser = { id: db.seq.user++, full_name: input.full_name.trim(), username, email: null, role: 'parent', is_admin: true, staff_role: input.staff_role, phone: input.phone || null, created_at: new Date().toISOString(), password: input.password! };
+      db.users.push(u);
+      save(db);
+      return staffOf(u);
+    },
+
+    async updateStaff(id, input) {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant');
+      const u = db.users.find((x) => x.id === id && x.is_admin);
+      if (!u) throw new ApiError('Membre introuvable.', 404);
+      if (input.staff_role && input.staff_role !== 'gerant') keepOneManager(db, u);
+      if (input.full_name !== undefined) u.full_name = input.full_name.trim() || u.full_name;
+      if (input.phone !== undefined) u.phone = input.phone || null;
+      if (input.staff_role) u.staff_role = input.staff_role;
+      if (input.password) u.password = input.password;
+      save(db);
+      return staffOf(u);
+    },
+
+    async removeStaff(id) {
+      await delay();
+      const db = load();
+      const me = requireRole(db, 'gerant');
+      const u = db.users.find((x) => x.id === id && x.is_admin);
+      if (!u) throw new ApiError('Membre introuvable.', 404);
+      if (u.id === me.id) throw new ApiError('Vous ne pouvez pas retirer votre propre accès.', 422);
+      keepOneManager(db, u);
+      u.is_admin = false;
+      u.staff_role = null;
+      save(db);
+    },
+
+    async promos() {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant');
+      return clone(db.promos).reverse();
+    },
+
+    async createPromo(input) {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant');
+      const code = input.code?.trim().toUpperCase() || null;
+      if (code && !/^[A-Z0-9_-]{3,40}$/.test(code)) validation({ code: 'Code : 3 à 40 caractères, lettres et chiffres (ex. RENTREE26).' });
+      if (code && db.promos.some((p) => p.code === code)) validation({ code: 'Ce code existe déjà.' });
+      if (!input.label.trim()) validation({ label: 'Donnez un nom à la remise.' });
+      if (!(input.value > 0)) validation({ value: 'Indiquez une valeur.' });
+      const p: Promo = { ...input, code, id: db.seq.promo++, uses: 0, automatic: code === null };
+      db.promos.push(p);
+      save(db);
+      return clone(p);
+    },
+
+    async updatePromo(id, input) {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant');
+      const p = db.promos.find((x) => x.id === id);
+      if (!p) throw new ApiError('Promotion introuvable.', 404);
+      const code = input.code?.trim().toUpperCase() || null;
+      if (code && db.promos.some((x) => x.code === code && x.id !== id)) validation({ code: 'Ce code existe déjà.' });
+      Object.assign(p, input, { code, automatic: code === null });
+      save(db);
+      return clone(p);
+    },
+
+    async deletePromo(id) {
+      await delay();
+      const db = load();
+      requireRole(db, 'gerant');
+      db.promos = db.promos.filter((x) => x.id !== id);
+      save(db);
     },
 
     async listCollections() {
@@ -306,7 +846,13 @@ export const mockApi: KolaApi = {
       if (!name.trim()) validation({ name: 'Donnez un nom à la collection.' });
       const slug = slugify(name);
       if (db.collections.some((c) => c.slug === slug)) validation({ name: 'Une collection porte déjà ce nom.' });
-      const c = { id: db.seq.collection++, slug, name: name.trim(), is_active: false, created_at: new Date().toISOString() };
+      const c = {
+        id: db.seq.collection++,
+        slug,
+        name: name.trim(),
+        is_active: false,
+        created_at: new Date().toISOString(),
+      };
       db.collections.push(c);
       db.carousel[c.id] = [];
       save(db);
@@ -352,7 +898,11 @@ export const mockApi: KolaApi = {
       const list = (db.carousel[c.id] ??= []);
       let pos = list.reduce((m, i) => Math.max(m, i.position), 0);
       for (const f of files) {
-        list.push({ id: db.seq.carousel++, image_url: await fileToDataUrl(f), position: ++pos });
+        list.push({
+          id: db.seq.carousel++,
+          image_url: await fileToDataUrl(f),
+          position: ++pos,
+        });
       }
       save(db);
       await delay();

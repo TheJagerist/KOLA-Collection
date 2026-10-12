@@ -39,17 +39,45 @@ class CatalogueSeeder extends Seeder
         }
 
         foreach ($this->products() as $data) {
-            $data['image_path'] = isset($data['image']) ? $this->copy("products/{$data['image']}", 'products') : null;
-            $data['sketch_path'] = isset($data['sketch']) ? $this->copy("sketches/{$data['sketch']}", 'sketches') : null;
-            $orderCount = $data['order_count'] ?? 0;
-            unset($data['image'], $data['sketch'], $data['order_count']);
-
-            $product = Product::query()->updateOrCreate(
-                ['slug' => $data['slug']],
-                $data + ['collection_id' => $ecolier->id, 'niveaux' => ['college', 'lycee']],
-            );
-            $product->forceFill(['order_count' => $orderCount])->save();
+            $this->upsertProduct($data, $ecolier);
         }
+    }
+
+    /**
+     * Remet les articles d'origine qui ont disparu (supprimés par erreur, base vide…),
+     * sans toucher à ceux qui existent encore (prix ou textes modifiés par l'admin conservés).
+     * Utilisé par « php artisan kola:restore-catalogue ».
+     *
+     * @return list<string> noms des articles rajoutés
+     */
+    public function restoreMissing(): array
+    {
+        $collection = Collection::active()
+            ?? tap(Collection::query()->firstOrCreate(['slug' => 'ecolier'], ['name' => 'Collection Écolier']))->activate();
+
+        $added = [];
+        foreach ($this->products() as $data) {
+            if (! Product::query()->where('slug', $data['slug'])->exists()) {
+                $this->upsertProduct($data, $collection);
+                $added[] = $data['name'];
+            }
+        }
+
+        return $added;
+    }
+
+    private function upsertProduct(array $data, Collection $collection): void
+    {
+        $data['image_path'] = isset($data['image']) ? $this->copy("products/{$data['image']}", 'products') : null;
+        $data['sketch_path'] = isset($data['sketch']) ? $this->copy("sketches/{$data['sketch']}", 'sketches') : null;
+        $orderCount = $data['order_count'] ?? 0;
+        unset($data['image'], $data['sketch'], $data['order_count']);
+
+        $product = Product::query()->updateOrCreate(
+            ['slug' => $data['slug']],
+            $data + ['collection_id' => $collection->id, 'niveaux' => ['college', 'lycee']],
+        );
+        $product->forceFill(['order_count' => $orderCount])->save();
     }
 
     /** Copie une image de seed vers le disque public et renvoie son chemin */

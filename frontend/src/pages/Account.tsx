@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { ChevronDown, LayoutDashboard, LogOut, Package } from 'lucide-react';
+import { ChevronDown, LayoutDashboard, LogOut, Package, UserCog } from 'lucide-react';
 import { useAuth } from '../stores/auth';
 import { useMyOrders } from '../hooks/queries';
 import type { Order } from '../lib/api';
@@ -11,6 +11,7 @@ import { cn } from '../lib/cn';
 import { Button, ButtonLink } from '../components/ui/Button';
 import { EmptyState, Skeleton, StatusBadge } from '../components/ui/misc';
 import { WhatsAppIcon } from '../components/ui/icons';
+import { Avatar } from '../components/ui/Avatar';
 
 export default function Account() {
   const { user, signOut } = useAuth();
@@ -28,9 +29,7 @@ export default function Account() {
     <div className="container-k py-10 sm:py-14">
       <div className="flex flex-col gap-6 rounded-[32px] bg-brun-900 p-6 text-creme-100 sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div className="flex items-center gap-4">
-          <div className="grid size-16 place-items-center rounded-2xl bg-rouille-500 font-display text-2xl text-creme-50">
-            {user.full_name.charAt(0).toUpperCase()}
-          </div>
+          <Avatar user={user} className="size-16 text-xl ring-2 ring-creme-50/15" />
           <div>
             <h1 className="text-2xl text-creme-50 sm:text-3xl">{user.full_name}</h1>
             <p className="text-[14px] text-creme-200/70">
@@ -40,6 +39,9 @@ export default function Account() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <ButtonLink to="/profil" variant="light" size="sm" icon={<UserCog className="size-4" />}>
+            Mon profil
+          </ButtonLink>
           {user.is_admin && (
             <ButtonLink to="/admin" variant="light" size="sm" icon={<LayoutDashboard className="size-4" />}>
               Administration
@@ -135,6 +137,11 @@ function OrderRow({ order, customerName }: { order: Order; customerName: string 
                 <span>
                   {PAYMENT_LABEL[order.payment_method]}
                   {order.delivery_city && ` · Livraison ${order.delivery_city}`}
+                  {order.delivery_date &&
+                    ` le ${new Date(order.delivery_date + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}`}
+                  {order.delivery_slot && ` (${order.delivery_slot})`}
+                  {order.courier && ` · livreur : ${order.courier.full_name.split(' ')[0]}`}
+                  {!!order.discount && ` · remise ${fcfa(order.discount)}`}
                 </span>
                 {order.status === 'en_attente' && (
                   <a

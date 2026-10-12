@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { Logo } from '../ui/misc';
 import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from '../ui/icons';
 import { contactWhatsAppLink } from '../../lib/whatsapp';
-import { API_MODE } from '../../lib/api';
 
 const socials = [
   { href: 'https://instagram.com/kolacollection', label: 'Instagram', Icon: InstagramIcon, bg: 'bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#515BD4]' },
@@ -53,7 +52,6 @@ export function Footer() {
         <div className="mt-14 flex flex-col gap-2 border-t border-creme-200/10 pt-6 text-[13px] text-creme-200/50 sm:flex-row sm:justify-between">
           <span>© {new Date().getFullYear()} Kōlā Collection — République du Congo</span>
           <span className="flex items-center gap-3">
-            {API_MODE === 'mock' && <span className="rounded-full border border-creme-200/15 px-2.5 py-0.5 text-[11px]">Mode démo · données simulées</span>}
             Brazzaville · Pointe-Noire
           </span>
         </div>

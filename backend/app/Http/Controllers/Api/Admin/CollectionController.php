@@ -26,13 +26,10 @@ class CollectionController extends Controller
 
         $slug = Str::slug($data['name']);
 
-        $request->validate([
-            'name' => [
-                Rule::unique('collections', 'slug')->where(
-                    fn ($q) => $q->where('slug', $slug)
-                ),
-            ],
-        ]);
+        // Le nom donne le slug : on vérifie l'unicité sur le slug (sinon erreur SQL 500)
+        validator(['slug' => $slug], ['slug' => [Rule::unique('collections', 'slug')]], [
+            'slug.unique' => 'Une collection porte déjà ce nom.',
+        ])->validate();
 
         $collection = Collection::create([
             'name' => $data['name'],

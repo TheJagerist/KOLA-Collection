@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Lock, MapPin, Smartphone } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Lock, MapPin, Smartphone, TicketPercent, X } from 'lucide-react';
 import { api, ApiError, type PaymentMethod } from '../lib/api';
 import { cartTotals, useCart } from '../stores/cart';
 import { useAuth } from '../stores/auth';
@@ -25,12 +25,37 @@ export default function Checkout() {
   const user = useAuth((s) => s.user);
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const t = cartTotals(lines);
+  const base = cartTotals(lines);
+  const items = lines.map((l) => ({ product_id: l.product.id, size: l.size, niveau: l.niveau, qty: l.qty }));
+
+  // Code promo + remises automatiques (ex. remise famille) : le serveur calcule le prix final
+  const [promoInput, setPromoInput] = useState('');
+  const [promo, setPromo] = useState<string | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const quote = useQuery({
+    queryKey: ['quote', JSON.stringify(items), promo],
+    queryFn: () => api.quote(items, promo),
+    enabled: items.length > 0,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const quoteErr = quote.error instanceof ApiError ? quote.error : null;
+  // Code refusé : on le retire et on affiche la raison
+  useEffect(() => {
+    if (promo && quoteErr?.errors.promo_code) {
+      setPromoError(quoteErr.errors.promo_code[0]);
+      setPromo(null);
+    }
+  }, [promo, quoteErr]);
+  const q = quote.data;
+  const t = q ? { total: q.total, deposit: q.deposit, balance: q.balance, count: q.items_count } : base;
 
   const [method, setMethod] = useState<PaymentMethod | null>(null);
-  const [phone, setPhone] = useState('');
-  const [city, setCity] = useState<string>('');
-  const [address, setAddress] = useState('');
+  // Pré-remplissage depuis le profil (téléphone, ville et adresse par défaut)
+  const profile = useAuth.getState().user;
+  const [phone, setPhone] = useState(profile?.phone ? profile.phone.replace(/(\d{2})(\d{3})(\d{2})(\d{2})/, '$1 $2 $3 $4') : '');
+  const [city, setCity] = useState<string>(profile?.default_city ?? '');
+  const [address, setAddress] = useState(profile?.default_address ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState(false);
 
@@ -45,6 +70,10 @@ export default function Checkout() {
       setConfirm(false);
       if (e instanceof ApiError && e.status === 422) {
         setErrors(Object.fromEntries(Object.entries(e.errors).map(([k, v]) => [k.startsWith('items') ? 'items' : k, v[0]])));
+        if (e.errors.promo_code) {
+          setPromoError(e.errors.promo_code[0]);
+          setPromo(null);
+        }
       } else {
         setErrors({ items: e instanceof Error ? e.message : 'Commande impossible.' });
       }
@@ -73,6 +102,7 @@ export default function Checkout() {
       payment_phone: cleanPhone,
       delivery_city: city,
       delivery_address: address.trim(),
+      promo_code: promo,
     });
 
   return (
@@ -80,7 +110,9 @@ export default function Checkout() {
       <PageHeader kicker="Commande" title="Finaliser ma commande" />
       <div className="container-k grid gap-10 py-10 lg:grid-cols-[1fr_380px] lg:py-14">
         <div className="space-y-6">
-          {errors.items && <div className="rounded-2xl bg-rouille-50 px-5 py-4 text-[14px] font-medium text-rouille-600">{errors.items}</div>}
+          {(errors.items || (quoteErr && !quoteErr.errors.promo_code)) && (
+            <div className="rounded-2xl bg-rouille-50 px-5 py-4 text-[14px] font-medium text-rouille-600 dark:bg-rouille-500/10">{errors.items ?? quoteErr?.firstError()}</div>
+          )}
 
           <Section icon={<MapPin className="size-5" />} n="1" title="Livraison">
             <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
@@ -146,7 +178,40 @@ export default function Checkout() {
           </Section>
         </div>
 
-        <OrderSummary {...t}>
+        <OrderSummary {...t} subtotal={q?.subtotal} discount={q?.discount} discountLabel={q?.promo ? `${q.promo.label}${q.promo.code ? ` (${q.promo.code})` : ''}` : undefined}>
+          <div className="mt-5">
+            {promo && q?.promo?.code ? (
+              <div className="flex items-center justify-between gap-2 rounded-xl bg-emerald-400/10 px-3 py-2.5 text-[13.5px] text-emerald-300">
+                <span className="flex items-center gap-2">
+                  <TicketPercent className="size-4" /> Code <strong className="font-mono">{q.promo.code}</strong> appliqué
+                </span>
+                <button onClick={() => setPromo(null)} className="grid size-7 place-items-center rounded-full hover:bg-white/10" aria-label="Retirer le code">
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  setPromoError(null);
+                  if (promoInput.trim()) setPromo(promoInput.trim().toUpperCase());
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  value={promoInput}
+                  onChange={(e) => setPromoInput(e.target.value)}
+                  placeholder="Code promo"
+                  aria-label="Code promo"
+                  className="h-10 min-w-0 flex-1 rounded-xl border border-creme-50/15 bg-white/[0.06] px-3 text-[14px] text-creme-50 uppercase placeholder:text-creme-200/40 placeholder:normal-case focus:border-creme-50/40 focus:outline-none"
+                />
+                <button disabled={!promoInput.trim() || quote.isFetching} className="h-10 rounded-xl bg-creme-50 px-4 text-[13px] font-semibold text-brun-900 transition hover:bg-white disabled:opacity-40">
+                  Appliquer
+                </button>
+              </form>
+            )}
+            {promoError && <p className="mt-1.5 text-[12.5px] font-medium text-rouille-400">{promoError}</p>}
+          </div>
           <ul className="mt-5 space-y-2 border-t border-creme-50/10 pt-4 text-[13px] text-creme-200/80">
             {lines.map((l) => (
               <li key={l.key} className="flex justify-between gap-3">

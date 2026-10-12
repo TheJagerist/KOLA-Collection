@@ -43,6 +43,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-secret}
       KOLA_AUTO_MIGRATE: "true"
       KOLA_AUTO_SEED: "true"
+      KOLA_PAYMENT_DRIVER: ${KOLA_PAYMENT_DRIVER:-fake}   # simulateur Mobile Money en dev ; cinetpay en production
     volumes:
       - ./backend:/var/www/html
 
@@ -66,7 +67,7 @@ services:
       - nginx
     environment:
       VITE_API_PROXY_TARGET: http://nginx
-      VITE_API_MODE: ${VITE_API_MODE:-mock}
+      VITE_API_MODE: ${VITE_API_MODE:-}   # vide = auto (API si elle répond, sinon démo)
       VITE_USE_POLLING: "true"
     ports:
       - "${FRONT_FORWARD_PORT:-5173}:5173"

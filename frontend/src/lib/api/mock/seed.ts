@@ -1,4 +1,4 @@
-import type { CarouselImage, Collection, HomepageContent, Order, Product, User } from '../types';
+import type { CarouselImage, Collection, HomepageContent, Order, OrderEvent, OrderStatus, PaymentInfo, Product, Promo, StaffRole, User } from '../types';
 
 /**
  * Données initiales du mock — reprises de la base Supabase de l'ancien site
@@ -8,6 +8,7 @@ import type { CarouselImage, Collection, HomepageContent, Order, Product, User }
 
 export interface MockUser extends User {
   password: string;
+  admin_note?: string | null;
 }
 
 export interface MockDb {
@@ -18,10 +19,13 @@ export interface MockDb {
   carousel: Record<number, CarouselImage[]>; // par collection_id
   products: Product[];
   orders: (Order & { user_id: number })[];
-  seq: { user: number; collection: number; product: number; order: number; carousel: number };
+  events: (OrderEvent & { order_id: number })[];
+  promos: Promo[];
+  payments: (PaymentInfo & { order_id: number })[];
+  seq: { user: number; collection: number; product: number; order: number; carousel: number; event: number; promo: number };
 }
 
-export const SEED_VERSION = 3;
+export const SEED_VERSION = 6;
 
 const C1 = 1; // Collection Écolier (active)
 const C2 = 2; // Hiver
@@ -51,7 +55,7 @@ function product(p: Partial<Product> & Pick<Product, 'id' | 'name' | 'slug' | 'e
 }
 
 export function createSeed(): MockDb {
-  return {
+  const db: MockDb = {
     version: SEED_VERSION,
     users: [
       {
@@ -208,6 +212,128 @@ export function createSeed(): MockDb {
         delivered_at: null,
       },
     ],
-    seq: { user: 3, collection: 3, product: 7, order: 2, carousel: 6 },
+    events: [],
+    promos: [
+      { id: 1, code: null, label: 'Remise famille dès 3 articles', type: 'percent', value: 10, min_items: 3, min_total: 0, is_active: false, starts_at: null, ends_at: null, max_uses: null, uses: 0, automatic: true },
+      { id: 2, code: 'RENTREE26', label: 'Rentrée 2026', type: 'amount', value: 1000, min_items: 0, min_total: 10000, is_active: true, starts_at: null, ends_at: null, max_uses: 200, uses: 12, automatic: false },
+    ],
+    payments: [],
+    seq: { user: 3, collection: 3, product: 7, order: 2, carousel: 6, event: 1, promo: 3 },
   };
+  addDemoActivity(db);
+  // Équipe de démonstration (rôles) — mot de passe kola1234
+  const staff: [string, string, StaffRole, string | null][] = [
+    ['prepa', 'Préparateur Kōlā', 'preparateur', null],
+    ['livreur', 'Livreur Kōlā', 'livreur', '055555555'],
+  ];
+  staff.forEach(([username, full_name, staff_role, phone]) =>
+    db.users.push({ id: db.seq.user++, full_name, username, email: null, role: 'parent', is_admin: true, staff_role, phone, created_at: new Date().toISOString(), password: 'kola1234' }),
+  );
+  db.users.forEach((u) => {
+    if (u.is_admin && !u.staff_role) u.staff_role = 'gerant';
+  });
+  // Stock suivi sur deux articles pour la démo (alerte « stock bas »)
+  db.products.forEach((p) => {
+    if (p.slug === 'chemise-epaulette-kaki') p.stock = { '10': 14, '12': 3, '14': 0, M: 9 };
+    if (p.slug === 'jupe-bleu-nuit-longue') p.stock = { '10': 6, '12': 2, '14': 8, M: 5 };
+  });
+  // Historique minimal des commandes de démo
+  db.orders.forEach((o) => {
+    db.events.push({ id: db.seq.event++, order_id: o.id, type: 'created', from_status: null, to_status: 'en_attente', body: null, created_at: o.created_at, user: o.customer ? { id: o.customer.id, full_name: o.customer.full_name, is_staff: false } : null });
+    if (o.status !== 'en_attente') db.events.push({ id: db.seq.event++, order_id: o.id, type: 'status', from_status: 'en_attente', to_status: o.status, body: null, created_at: o.delivered_at ?? o.created_at, user: { id: 1, full_name: 'Administrateur Kōlā', is_staff: true } });
+    o.subtotal = o.total;
+    o.discount = 0;
+    o.source = 'web';
+  });
+  return db;
+}
+
+/* ------------------------------------------------------------------
+   Activité de démonstration : clients et commandes répartis sur les
+   90 derniers jours, pour que le tableau de bord admin ait de la matière.
+   Générateur pseudo-aléatoire à graine fixe → mêmes données à chaque reset.
+   ------------------------------------------------------------------ */
+const DEMO_CUSTOMERS = [
+  'Grâce Loubaki', 'Prisca Ngoma', 'Arsène Malonga', 'Ruth Moukala', 'Christelle Bouanga', 'Hervé Kimbembe',
+  'Sandrine Okemba', 'Junior Massamba', 'Bénédicte Nkounkou', 'Josué Mabiala', 'Aurélie Itoua', 'Fabrice Mavoungou',
+];
+const QUARTIERS = {
+  Brazzaville: ['Bacongo', 'Poto-Poto', 'Moungali', 'Ouenzé', 'Talangaï', 'Makélékélé', 'Mfilou'],
+  'Pointe-Noire': ['Mpita', 'Loandjili', 'Tié-Tié', 'Mvou-Mvou', 'Lumumba', 'Ngoyo'],
+} as const;
+
+function addDemoActivity(db: MockDb) {
+  let seed = 20260924;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  const pick = <T,>(a: readonly T[]) => a[Math.floor(rnd() * a.length)];
+  const now = Date.now();
+  const day = 86_400_000;
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const ref = () => 'KLA-2026-' + Array.from({ length: 6 }, () => pick(letters.split(''))).join('');
+
+  DEMO_CUSTOMERS.forEach((full_name, i) => {
+    db.users.push({
+      id: 10 + i,
+      full_name,
+      username: full_name.split(' ')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') + (240 + i),
+      email: null,
+      role: i % 4 === 3 ? 'eleve' : 'parent',
+      is_admin: false,
+      created_at: new Date(now - (95 - i * 6) * day).toISOString(),
+      password: 'kola1234',
+    });
+  });
+
+  const catalogue = db.products.filter((p) => !p.is_archived);
+  let id = 2;
+  for (let d = 89; d >= 0; d--) {
+    // La rentrée approche : de plus en plus de commandes
+    const n = Math.floor(rnd() * (1.3 + (89 - d) / 45));
+    for (let k = 0; k < n; k++) {
+      const user = db.users[2 + Math.floor(rnd() * DEMO_CUSTOMERS.length)];
+      const items = Array.from({ length: 1 + Math.floor(rnd() * 3) }, () => {
+        const p = pick(catalogue);
+        const qty = 1 + Math.floor(rnd() * 3);
+        return {
+          product_id: p.id,
+          product_name: p.name,
+          product_image_url: p.image_url,
+          size: pick(p.sizes),
+          niveau: pick(p.niveaux),
+          qty,
+          unit_price: p.price,
+          line_total: qty * p.price,
+        };
+      });
+      const total = items.reduce((s, i) => s + i.line_total, 0);
+      const deposit = Math.ceil(total / 2);
+      const created = now - d * day - Math.floor(rnd() * 10) * 3_600_000;
+      const r = rnd();
+      // Les commandes anciennes sont plus avancées dans le circuit de livraison
+      const status: OrderStatus =
+        r < 0.06 ? 'annulee' : d > 12 ? (r < 0.85 ? 'livre' : 'transit') : d > 5 ? pick(['validee', 'transit', 'livre'] as const) : pick(['en_attente', 'en_attente', 'validee'] as const);
+      const city = rnd() < 0.55 ? 'Brazzaville' : 'Pointe-Noire';
+      db.orders.push({
+        id: id++,
+        user_id: user.id,
+        reference: ref(),
+        status,
+        total,
+        deposit,
+        balance: total - deposit,
+        balance_paid: status === 'livre',
+        payment_method: rnd() < 0.5 ? 'airtel' : 'mtn',
+        payment_phone: `0${pick(['5', '6'])}${Math.floor(1_000_000 + rnd() * 8_999_999)}`,
+        delivery_city: city,
+        delivery_address: `Quartier ${pick(QUARTIERS[city])}`,
+        items,
+        customer: { id: user.id, full_name: user.full_name, username: user.username },
+        created_at: new Date(created).toISOString(),
+        delivered_at: status === 'livre' ? new Date(Math.min(now, created + 3 * day)).toISOString() : null,
+      });
+    }
+  }
+  db.orders.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  db.seq.order = id;
+  db.seq.user = 10 + DEMO_CUSTOMERS.length;
 }

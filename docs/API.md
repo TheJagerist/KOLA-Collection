@@ -151,6 +151,20 @@ Révoque le jeton courant. Réponse 204.
 ### `GET /api/auth/me` 🔒
 Renvoie `User`. Le front l'appelle au chargement pour restaurer la session.
 
+### Profil (client et admin) 🔒 ✅
+L'objet `User` renvoyé contient aussi : `phone` (9 chiffres, sans +242), `default_city`, `default_address`
+(pré-remplissent la commande), `avatar_url` (`/storage/avatars/…` ou `null`) et `has_password` (faux pour un compte Google).
+
+| Méthode | Route | Corps | Réponse |
+|---|---|---|---|
+| `PATCH` | `/api/auth/me` | champs optionnels : `full_name`, `username`, `email`, `phone`, `role`, `default_city`, `default_address` | `{ data: User }` |
+| `POST` | `/api/auth/me/avatar` | multipart `avatar` (jpg/png/webp ≤ 3 Mo) | `{ data: User }` |
+| `DELETE` | `/api/auth/me/avatar` | — | `{ data: User }` |
+| `PUT` | `/api/auth/password` | `current_password`, `password`, `password_confirmation` | `200` — les autres appareils sont déconnectés |
+| `POST` | `/api/auth/logout-others` | — | `{ revoked: n }` |
+
+`is_admin` n'est jamais modifiable par ces routes.
+
 ### Google OAuth (Socialite)
 1. `GET /api/auth/google/redirect` : redirige vers Google (le front fait `window.location.href = ...`).
 2. `GET /api/auth/google/callback` : crée l'utilisateur ou le retrouve (par `google_id` puis `email`), crée un jeton Sanctum, puis **redirige vers le front** :
@@ -193,7 +207,7 @@ Une commande de l'utilisateur (ou n'importe laquelle si admin). 404 sinon.
 
 ---
 
-## 6. Administration 🔒 + `is_admin`
+## 6. Administration 🔒 + `is_admin` ✅
 
 Middleware : `auth:sanctum` + vérification `is_admin` (403 sinon). Toutes ces routes travaillent sur la **collection active** sauf mention contraire.
 
@@ -243,33 +257,63 @@ Conseil : convertir les images en WebP et les redimensionner (≤ 1600 px) à l'
 ```
 GET    /api/health
 GET    /api/storefront
-GET    /api/products
+GET    /api/products                          (chaque produit expose `stock`)
 GET    /api/products/{idOrSlug}
 POST   /api/auth/register
 POST   /api/auth/login
 POST   /api/auth/logout                       🔒
 GET    /api/auth/me                           🔒
+PATCH  /api/auth/me                           🔒
+POST   /api/auth/me/avatar                    🔒
+DELETE /api/auth/me/avatar                    🔒
+PUT    /api/auth/password                     🔒
+POST   /api/auth/logout-others                🔒
 GET    /api/auth/google/redirect
 GET    /api/auth/google/callback
-POST   /api/orders                            🔒
+POST   /api/orders/quote                      prix + remise + contrôle du stock (public, 60/min)
+POST   /api/orders                            🔒  (+ promo_code)
 GET    /api/orders                            🔒
 GET    /api/orders/{reference}                🔒
-GET    /api/admin/orders                      🔒 admin
-PATCH  /api/admin/orders/{id}                 🔒 admin
-GET    /api/admin/collections                 🔒 admin
-POST   /api/admin/collections                 🔒 admin
-POST   /api/admin/collections/{id}/activate   🔒 admin
-PUT    /api/admin/homepage                    🔒 admin
-GET    /api/admin/carousel                    🔒 admin
-POST   /api/admin/carousel                    🔒 admin
-DELETE /api/admin/carousel/{id}               🔒 admin
-POST   /api/admin/carousel/reorder            🔒 admin
-GET    /api/admin/products                    🔒 admin
-POST   /api/admin/products                    🔒 admin
-POST   /api/admin/products/{id}               🔒 admin (_method=PUT)
-DELETE /api/admin/products/{id}               🔒 admin
-POST   /api/admin/products/{id}/restore       🔒 admin
+POST   /api/orders/{reference}/pay            🔒  paiement en ligne (kind: deposit|balance)
+GET    /api/payments/config                   { enabled, driver }
+GET    /api/payments/{transaction}            🔒  statut (re-vérifie auprès de l'agrégateur)
+POST   /api/payments/fake/{transaction}       dev uniquement (driver fake)
+POST   /api/payments/cinetpay/notify          webhook CinetPay (statut re-vérifié côté serveur)
+
+— Administration (🔒 is_admin + rôle) —
+                                              gérant | préparateur | livreur
+GET    /api/admin/deliveries                    ✓    |      ✓      |  ✓ (les siennes)
+POST   /api/admin/deliveries/{order}/start      ✓    |      ✓      |  ✓
+POST   /api/admin/deliveries/{order}/delivered  ✓    |      ✓      |  ✓
+GET    /api/admin/orders                        ✓    |      ✓      |
+POST   /api/admin/orders                        ✓    |      ✓      |   commande téléphone / boutique
+PATCH  /api/admin/orders/{order}                ✓    |      ✓      |   statut (Manu)
+GET    /api/admin/orders/{order}/events         ✓    |      ✓      |   historique
+POST   /api/admin/orders/{order}/notes          ✓    |      ✓      |   note interne
+PATCH  /api/admin/orders/{order}/delivery       ✓    |      ✓      |   livreur, date, créneau
+GET    /api/admin/couriers                      ✓    |      ✓      |
+GET    /api/admin/customers                     ✓    |      ✓      |
+GET    /api/admin/customers/{user}              ✓    |      ✓      |   + tailles habituelles, commandes
+PATCH  /api/admin/customers/{user}              ✓    |      ✓      |   admin_note
+GET    /api/admin/products                      ✓    |      ✓      |
+GET    /api/admin/stock/low                     ✓    |      ✓      |   tailles ≤ KOLA_LOW_STOCK
+PUT    /api/admin/products/{product}/stock      ✓    |             |   { stock: {"12": 4} | null }
+POST/PUT/DELETE /api/admin/products…            ✓    |             |
+/api/admin/collections, homepage, carousel      ✓    |             |
+GET|POST /api/admin/promos, PUT|DELETE /{id}    ✓    |             |
+GET|POST /api/admin/team, PATCH|DELETE /{user}  ✓    |             |
 ```
+
+### Nouveautés (12 oct.)
+
+- **Stock par taille** : `products.stock` (jsonb). `null` = stock non suivi. La commande refuse une taille épuisée (422 sur `items.N.qty`), le stock baisse à la commande et remonte si elle est annulée.
+- **Remises** : table `promo_codes`. `code = null` → remise automatique (ex. remise famille dès 3 articles). Non cumulables : la plus avantageuse est retenue. `orders.subtotal`, `discount`, `promo_code`, `promo_label`.
+- **Historique** : table `order_events` (`created | status | note | payment | delivery`, auteur, date).
+- **Livraison** : `orders.courier_id`, `delivery_date`, `delivery_slot`. Ressource `courier { id, full_name, phone }`.
+- **Rôles** : `users.staff_role` (`gerant | preparateur | livreur`) ; un admin sans rôle = gérant. Middleware `staff:…`.
+- **Notification nouvelle commande** : évènement `OrderPlaced` → e-mail à `KOLA_NOTIFY_EMAILS` (le tableau de bord, lui, sonne et affiche une alerte toutes les 30 s).
+- **Paiement en ligne** : table `payments`, `KOLA_PAYMENT_DRIVER=null|fake|cinetpay`. Acompte payé → commande `validee` ; solde payé → `balance_paid`.
+
 
 ## 8. Données de départ (seeders)
 
@@ -277,7 +321,7 @@ Les données réelles de l'ancien site (2 collections, textes d'accueil, 5 image
 
 ## 9. État d'avancement de l'API
 
-Voir `README-MANU.md` §3 et §5 : vitrine, authentification par nom d'utilisateur et commandes client sont implémentées et testées ; les routes admin et Google existent et renvoient `501` en attendant leur implémentation.
+Voir `README-MANU.md` §3 et §5 : vitrine, authentification, profil, commandes client et **tout le back-office admin** sont implémentés et testés. La connexion Google est faite (Manu). Les fonctions d'administration avancées (stock, promos, rôles, livraisons, paiement en ligne) sont décrites au §7.
 
 ## 10. Basculer le front sur l'API réelle
 

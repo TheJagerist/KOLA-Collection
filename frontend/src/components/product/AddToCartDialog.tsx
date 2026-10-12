@@ -66,11 +66,12 @@ function QuickViewBody({ product, onClose }: { product: Product; onClose: () => 
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {product.sizes.map((s) => (
-              <SelectPill key={s} active={size === s} onClick={() => setSize(s)}>
+              <SelectPill key={s} active={size === s} onClick={() => setSize(s)} disabled={stockLeft(product, s) === 0} title={stockLeft(product, s) === 0 ? 'Épuisé' : undefined}>
                 {s}
               </SelectPill>
             ))}
           </div>
+          <StockHint product={product} size={size} />
           {touched && !size && <p className="mt-1.5 text-[12.5px] font-medium text-rouille-600">Choisissez une taille.</p>}
         </fieldset>
 
@@ -87,7 +88,7 @@ function QuickViewBody({ product, onClose }: { product: Product; onClose: () => 
         </fieldset>
 
         <div className="mt-6 flex items-center gap-3">
-          <QtyStepper value={qty} onChange={setQty} />
+          <QtyStepper value={qty} onChange={setQty} max={Math.min(20, (size && stockLeft(product, size)) || 20)} />
           <Button className="h-12 flex-1" variant={ready ? 'primary' : 'dark'} onClick={submit}>
             {ready ? `Ajouter · ${fcfa(product.price * qty)}` : 'Choisissez taille et niveau'}
           </Button>
@@ -104,15 +105,18 @@ function QuickViewBody({ product, onClose }: { product: Product; onClose: () => 
   );
 }
 
-export function SelectPill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+export function SelectPill({ active, onClick, children, disabled, title }: { active: boolean; onClick: () => void; children: React.ReactNode; disabled?: boolean; title?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      disabled={disabled}
+      title={title}
       className={cn(
         'h-11 min-w-12 rounded-xl border px-3 text-sm font-semibold transition active:scale-95',
         active ? 'border-inverse bg-inverse text-on-inverse shadow-sm' : 'border-line bg-surface text-ink hover:border-ink-muted',
+        disabled && 'cursor-not-allowed border-dashed text-ink-muted line-through opacity-50 hover:border-line active:scale-100',
       )}
     >
       {children}
@@ -134,4 +138,14 @@ export function QtyStepper({ value, onChange, min = 1, max = 20 }: { value: numb
       </button>
     </div>
   );
+}
+
+/** Stock restant d'une taille (null = stock non suivi) */
+export const stockLeft = (p: Pick<Product, 'stock'>, size: string): number | null => (p.stock ? (p.stock[size] ?? 0) : null);
+
+/** « Plus que 2 en taille 12 » sous le sélecteur de taille */
+export function StockHint({ product, size }: { product: Pick<Product, 'stock'>; size: string }) {
+  const left = size ? stockLeft(product, size) : null;
+  if (left === null || left > 5) return null;
+  return <p className="mt-1.5 text-[12.5px] font-semibold text-amber-700 dark:text-amber-400">{left === 0 ? 'Épuisé dans cette taille' : `Plus que ${left} en taille ${size}`}</p>;
 }

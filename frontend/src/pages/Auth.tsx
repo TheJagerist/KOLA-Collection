@@ -71,7 +71,11 @@ export default function AuthPage() {
   );
 }
 
+/** Bouton masqué tant que la connexion Google n'est pas configurée côté Laravel (VITE_GOOGLE_AUTH=true pour l'afficher) */
+const GOOGLE_ENABLED = import.meta.env.VITE_GOOGLE_AUTH === 'true';
+
 function GoogleButton() {
+  if (!GOOGLE_ENABLED) return null;
   const onClick = () => {
     if (API_MODE === 'mock') {
       toast.show('Connexion Google disponible une fois l’API Laravel branchée.');
