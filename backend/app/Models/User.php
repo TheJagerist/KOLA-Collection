@@ -21,7 +21,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property bool $is_admin
  */
 // ⚠️ is_admin n'est volontairement PAS dans Fillable : impossible de se donner les droits via une requête.
-#[Fillable(['full_name', 'username', 'email', 'password', 'google_id', 'phone', 'role', 'default_city', 'default_address'])]
+#[Fillable(['full_name', 'username', 'email', 'email_notifications', 'password', 'google_id', 'phone', 'role', 'default_city', 'default_address'])]
 #[Hidden(['password', 'remember_token', 'google_id'])]
 class User extends Authenticatable
 {
@@ -38,6 +38,7 @@ class User extends Authenticatable
         'avatar_path' => null,
         'staff_role' => null,
         'admin_note' => null,
+        'email_notifications' => true,
     ];
 
     protected function casts(): array
@@ -48,7 +49,20 @@ class User extends Authenticatable
             'role' => Role::class,
             'is_admin' => 'boolean',
             'staff_role' => StaffRole::class,
+            'email_notifications' => 'boolean',
         ];
+    }
+
+    /** Empreinte / Face ID enregistrés sur ses appareils */
+    public function passkeys(): HasMany
+    {
+        return $this->hasMany(Passkey::class);
+    }
+
+    /** Peut recevoir les e-mails de suivi (reçus, statuts) */
+    public function wantsEmails(): bool
+    {
+        return (bool) $this->email && $this->email_notifications;
     }
 
     public function orders(): HasMany

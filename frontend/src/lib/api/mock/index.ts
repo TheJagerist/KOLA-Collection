@@ -44,14 +44,16 @@ const delay = (ms = 250 + Math.random() * 250) => new Promise((r) => setTimeout(
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
 function publicUser(u: MockUser): User {
-  const { password: _pw, admin_note: _n, ...rest } = u;
+  const { password: _pw, admin_note: _n, passkeys: _k, ...rest } = u;
   void _pw;
   void _n;
+  void _k;
   return clone({
     phone: null,
     default_city: null,
     default_address: null,
     avatar_url: null,
+    email_notifications: true,
     ...rest,
     has_password: !!u.password,
   });
@@ -115,6 +117,33 @@ function fileToDataUrl(file: File): Promise<string> {
 }
 
 const USERNAME_RE = /^[a-z0-9._-]{3,20}$/;
+
+/** Identifiant de connexion : nom d'utilisateur, e-mail ou téléphone */
+function parseLogin(raw: string): { type: 'email' | 'phone' | 'username'; value: string } {
+  const v = raw.trim();
+  if (v.includes('@')) return { type: 'email', value: v.toLowerCase() };
+  const d = v.replace(/\D/g, '');
+  if (d.length >= 8 && /^[\d\s().+-]+$/.test(v)) {
+    let p = d.replace(/^(00)?242/, '');
+    if (p.length === 8) p = '0' + p;
+    return { type: 'phone', value: p };
+  }
+  return { type: 'username', value: v.toLowerCase() };
+}
+function findByLogin(db: MockDb, raw: string) {
+  const { type, value } = parseLogin(raw);
+  return db.users.find((u) => (type === 'email' ? u.email?.toLowerCase() === value : type === 'phone' ? u.phone === value : u.username === value));
+}
+
+// Démo : codes de connexion et défis WebAuthn gardés en mémoire
+const mockCodes = new Map<number, { code: string; expires: number; tries: number }>();
+const mockChallenges = new Map<string, true>();
+const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const randomB64 = (n = 32) => b64url(crypto.getRandomValues(new Uint8Array(n)));
+const maskEmail = (e: string) => {
+  const [n, d] = e.split('@');
+  return `${n.slice(0, 2)}${'•'.repeat(Math.max(1, n.length - 2))}@${d}`;
+};
 const CATEGORIES: Category[] = ['chemise', 'pantalon', 'jupe'];
 
 /* ------------------------------------------------------------------ Règles métier partagées (miroir de Laravel) */
@@ -346,11 +375,21 @@ export const mockApi: KolaApi = {
         password: 'Le mot de passe doit contenir au moins 8 caractères.',
       });
     if (db.users.some((u) => u.username === username)) validation({ username: "Ce nom d'utilisateur est déjà pris." });
+    const email = payload.email?.trim().toLowerCase() || null;
+    const phone = (payload.phone ?? '').replace(/\D/g, '').replace(/^(00)?242/, '') || null;
+    if (payload.password !== payload.password_confirmation) validation({ password: 'Les deux mots de passe ne correspondent pas.' });
+    if (!phone) validation({ phone: 'Indiquez votre numéro de téléphone.' });
+    if (db.users.some((u) => u.phone === phone)) validation({ phone: 'Ce numéro est déjà utilisé par un autre compte. Connectez-vous ou utilisez un autre numéro.' });
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) validation({ email: 'Adresse e-mail invalide.' });
+    if (email && db.users.some((u) => u.email?.toLowerCase() === email)) validation({ email: 'Cette adresse e-mail est déjà utilisée par un autre compte.' });
+    if (phone && !/^0\d{8}$/.test(phone)) validation({ phone: 'Numéro invalide : 9 chiffres commençant par 0 (ex. 06 444 55 66).' });
     const user: MockUser = {
       id: db.seq.user++,
       full_name: payload.full_name.trim(),
       username,
-      email: null,
+      email,
+      phone,
+      email_notifications: true,
       role: payload.role,
       is_admin: false,
       created_at: new Date().toISOString(),
@@ -367,11 +406,112 @@ export const mockApi: KolaApi = {
   async login(payload) {
     await delay();
     const db = load();
-    const user = db.users.find((u) => u.username === payload.username.trim().toLowerCase());
+    const user = findByLogin(db, payload.login);
     if (!user || user.password !== payload.password) {
-      validation({ username: "Nom d'utilisateur ou mot de passe incorrect." });
+      validation({ login: 'Identifiant ou mot de passe incorrect.' });
     }
     return { token: `mock-${user.id}-${Date.now()}`, user: publicUser(user) };
+  },
+
+  async requestLoginCode(login, channel) {
+    await delay();
+    const db = load();
+    const user = findByLogin(db, login);
+    if (!user) validation({ login: 'Aucun compte ne correspond à cet identifiant.' });
+    const prefer = channel ?? (parseLogin(login).type === 'phone' ? 'sms' : 'email');
+    const ch = prefer === 'email' && user.email ? 'email' : prefer === 'sms' && user.phone ? 'sms' : user.email ? 'email' : user.phone ? 'sms' : null;
+    if (!ch) validation({ login: 'Ce compte n’a ni e-mail ni téléphone : connectez-vous avec votre mot de passe.' });
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    mockCodes.set(user.id, { code, expires: Date.now() + 600_000, tries: 0 });
+    return {
+      channel: ch,
+      destination: ch === 'email' ? maskEmail(user.email!) : `+242 ${user.phone!.slice(0, 2)} ••• •• ${user.phone!.slice(-2)}`,
+      expires_in: 600,
+      dev_code: code,
+    };
+  },
+
+  async verifyLoginCode(login, code) {
+    await delay();
+    const db = load();
+    const user = findByLogin(db, login);
+    const entry = user && mockCodes.get(user.id);
+    if (!user || !entry || entry.expires < Date.now()) validation({ code: 'Ce code a expiré. Demandez-en un nouveau.' });
+    if (entry.code !== code.trim()) {
+      entry.tries++;
+      const left = 5 - entry.tries;
+      if (left <= 0) mockCodes.delete(user.id);
+      validation({ code: left > 0 ? `Code incorrect. Il vous reste ${left} essai(s).` : 'Trop d’essais. Demandez un nouveau code.' });
+    }
+    mockCodes.delete(user.id);
+    return { token: `mock-${user.id}-${Date.now()}`, user: publicUser(user) };
+  },
+
+  passkeys: {
+    async list() {
+      await delay(150);
+      const u = currentUser(load());
+      return clone((u.passkeys ?? []).map(({ credential_id: _c, ...p }) => (void _c, p)));
+    },
+    async registerOptions() {
+      await delay(150);
+      const u = currentUser(load());
+      const challenge = randomB64();
+      mockChallenges.set(challenge, true);
+      return {
+        publicKey: {
+          rp: { name: 'Kōlā Collection', id: location.hostname },
+          user: { id: b64url(new TextEncoder().encode(String(u.id))), name: u.username ?? `client-${u.id}`, displayName: u.full_name },
+          challenge,
+          pubKeyCredParams: [
+            { type: 'public-key', alg: -7 },
+            { type: 'public-key', alg: -257 },
+          ],
+          timeout: 60000,
+          authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required' },
+          attestation: 'none',
+          excludeCredentials: (u.passkeys ?? []).map((p) => ({ type: 'public-key', id: p.credential_id })),
+        },
+      };
+    },
+    async register(payload) {
+      await delay();
+      const db = load();
+      const u = currentUser(db);
+      const cd = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(payload.client_data_json.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))));
+      if (!mockChallenges.delete(cd.challenge)) validation({ passkey: 'Délai dépassé, recommencez.' });
+      const ua = navigator.userAgent;
+      const name = payload.name || (/iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Téléphone Android' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Ordinateur Windows' : 'Cet appareil');
+      const pk = { id: Date.now(), name, credential_id: payload.id ?? randomB64(16), created_at: new Date().toISOString(), last_used_at: null };
+      u.passkeys = [...(u.passkeys ?? []), pk];
+      save(db);
+      const { credential_id: _c, ...pub } = pk;
+      void _c;
+      return pub;
+    },
+    async remove(id) {
+      await delay(150);
+      const db = load();
+      const u = currentUser(db);
+      u.passkeys = (u.passkeys ?? []).filter((p) => p.id !== id);
+      save(db);
+    },
+    async loginOptions() {
+      await delay(150);
+      const challenge = randomB64();
+      mockChallenges.set(challenge, true);
+      return { challenge_id: challenge, options: { publicKey: { challenge, rpId: location.hostname, timeout: 60000, userVerification: 'required', allowCredentials: [] } } };
+    },
+    async login(payload) {
+      await delay();
+      const db = load();
+      // Démo : on vérifie seulement que la clé a été enregistrée ici (l'API Laravel, elle, vérifie la signature)
+      const user = mockChallenges.delete(payload.challenge_id) ? db.users.find((u) => u.passkeys?.some((p) => p.credential_id === payload.id)) : undefined;
+      if (!user) validation({ passkey: 'Empreinte non reconnue sur ce site. Connectez-vous autrement puis activez-la dans votre profil.' });
+      user.passkeys!.find((p) => p.credential_id === payload.id)!.last_used_at = new Date().toISOString();
+      save(db);
+      return { token: `mock-${user.id}-${Date.now()}`, user: publicUser(user) };
+    },
   },
 
   async logout() {
@@ -755,6 +895,8 @@ export const mockApi: KolaApi = {
       if (!USERNAME_RE.test(username)) validation({ username: "Nom d'utilisateur : 3 à 20 caractères (lettres, chiffres, . _ -)." });
       if (db.users.some((u) => u.username === username)) validation({ username: "Ce nom d'utilisateur est déjà pris." });
       if ((input.password ?? '').length < 8) validation({ password: 'Au moins 8 caractères.' });
+      if (input.password !== input.password_confirmation) validation({ password: 'Les deux mots de passe ne correspondent pas.' });
+      if (!/^0\d{8}$/.test(input.phone ?? '')) validation({ phone: 'Indiquez le téléphone du membre (9 chiffres).' });
       const u: MockUser = { id: db.seq.user++, full_name: input.full_name.trim(), username, email: null, role: 'parent', is_admin: true, staff_role: input.staff_role, phone: input.phone || null, created_at: new Date().toISOString(), password: input.password! };
       db.users.push(u);
       save(db);

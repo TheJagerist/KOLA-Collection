@@ -1,13 +1,14 @@
-import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BadgeCheck,
   Camera,
   Check,
   Eye,
   EyeOff,
+  Fingerprint,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -29,6 +30,7 @@ import { Button } from '../ui/Button';
 import { Input, Select, Textarea } from '../ui/Field';
 import { Avatar, resizeImage } from '../ui/Avatar';
 import { ThemeToggle } from '../layout/ThemeToggle';
+import { passkeysSupported, platformAuthenticatorAvailable, registerThisDevice } from '../../lib/passkey';
 
 type Variant = 'client' | 'admin';
 type Tab = 'infos' | 'livraison' | 'securite' | 'preferences';
@@ -460,6 +462,7 @@ function InfosSection({ user, variant }: { user: User; variant: Variant }) {
             error={f.errors.email}
             autoComplete="email"
             placeholder="vous@exemple.cg"
+            hint="Reçus, suivi de commande et codes de connexion."
           />
           <div>
             <label htmlFor="phone" className="label">
@@ -698,6 +701,8 @@ function SecuritySection({ user }: { user: User }) {
         </Card>
       </form>
 
+      <PasskeysCard />
+
       <Card title="Appareils connectés" description="Vous avez prêté votre téléphone ou utilisé un ordinateur public ? Déconnectez tous les autres appareils.">
         <div className="flex flex-col gap-3 sm:flex-row">
           <Button variant="outline" size="sm" onClick={logoutOthers} loading={revoking} icon={<MonitorSmartphone className="size-4" />}>
@@ -739,10 +744,143 @@ function passwordStrength(p: string) {
   };
 }
 
+/* ================================================================== EMPREINTE / FACE ID */
+function PasskeysCard() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({ queryKey: ['passkeys'], queryFn: () => api.passkeys.list() });
+  const [supported, setSupported] = useState<boolean | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState<number | null>(null);
+
+  useEffect(() => {
+    platformAuthenticatorAvailable().then((ok) => setSupported(ok || passkeysSupported()));
+  }, []);
+
+  const add = async () => {
+    setAdding(true);
+    try {
+      await registerThisDevice();
+      toast.success('Empreinte activée sur cet appareil');
+      qc.invalidateQueries({ queryKey: ['passkeys'] });
+    } catch (e) {
+      if (!(e instanceof ApiError && e.message === 'Opération annulée.')) toast.error(e instanceof ApiError ? e.firstError() : 'Activation impossible.');
+    } finally {
+      setAdding(false);
+    }
+  };
+  const remove = async (id: number) => {
+    setRemoving(id);
+    try {
+      await api.passkeys.remove(id);
+      toast.success('Appareil retiré');
+      qc.invalidateQueries({ queryKey: ['passkeys'] });
+    } catch {
+      toast.error('Suppression impossible.');
+    } finally {
+      setRemoving(null);
+    }
+  };
+  const fmt = (iso: string) => new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  return (
+    <Card
+      title="Empreinte digitale et Face ID"
+      description="Connectez-vous en un geste, sans mot de passe. Votre empreinte reste sur votre appareil : Kōlā ne la reçoit jamais."
+      footer={
+        supported === false ? (
+          <span className="mr-auto text-[12.5px] text-ink-muted">Ce navigateur ne permet pas cette connexion (il faut le site en https et un appareil compatible).</span>
+        ) : (
+          <Button size="sm" onClick={add} loading={adding} icon={<Fingerprint className="size-4" />}>
+            Activer sur cet appareil
+          </Button>
+        )
+      }
+    >
+      {isLoading ? (
+        <div className="h-14 animate-pulse rounded-xl bg-surface-2" />
+      ) : data?.length ? (
+        <ul className="divide-y divide-line rounded-2xl border border-line">
+          {data.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 px-4 py-3">
+              <span className="grid size-9 place-items-center rounded-xl bg-surface-2 text-rouille-600">
+                <Fingerprint className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[14px] font-medium text-ink">{p.name}</div>
+                <div className="text-[12px] text-ink-muted">
+                  Ajouté le {fmt(p.created_at)}
+                  {p.last_used_at ? ` · utilisé le ${fmt(p.last_used_at)}` : ' · jamais utilisé'}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => remove(p.id)}
+                disabled={removing === p.id}
+                className="grid size-9 place-items-center rounded-lg text-ink-muted transition hover:bg-rouille-50 hover:text-rouille-600 disabled:opacity-50 dark:hover:bg-rouille-500/10"
+                aria-label={`Retirer ${p.name}`}
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-2xl border border-dashed border-line px-4 py-4 text-[13.5px] text-ink-muted">Aucun appareil pour l’instant. Activez l’empreinte sur votre téléphone pour vous connecter plus vite.</p>
+      )}
+    </Card>
+  );
+}
+
+/* ================================================================== PRÉFÉRENCES E-MAIL */
+function EmailPrefsCard() {
+  const { user, setUser } = useAuth();
+  const [busy, setBusy] = useState(false);
+  if (!user) return null;
+  const on = user.email_notifications !== false;
+  const toggle = async () => {
+    setBusy(true);
+    try {
+      setUser(await api.updateProfile({ email_notifications: !on }));
+      toast.success(!on ? 'E-mails activés' : 'E-mails désactivés');
+    } catch {
+      toast.error('Modification impossible.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card title="E-mails" description="Reçus, confirmation de commande et suivi de livraison envoyés par e-mail.">
+      {user.email ? (
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-line p-4">
+          <span className="min-w-0">
+            <span className="block text-[14px] font-medium text-ink">Recevoir le suivi de mes commandes</span>
+            <span className="block truncate text-[12.5px] text-ink-muted">Envoyé à {user.email}</span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={on}
+            onClick={toggle}
+            disabled={busy}
+            className={cn('relative h-6 w-10 shrink-0 rounded-full transition disabled:opacity-60', on ? 'bg-emerald-500' : 'bg-line')}
+          >
+            <span className={cn('absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow transition', on && 'translate-x-4')} />
+          </button>
+        </label>
+      ) : (
+        <p className="rounded-2xl border border-dashed border-line px-4 py-4 text-[13.5px] text-ink-muted">
+          Ajoutez une adresse e-mail dans l’onglet <strong className="text-ink">Informations</strong> pour recevoir vos reçus et le suivi par e-mail.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 /* ================================================================== PRÉFÉRENCES */
 function PreferencesSection({ variant }: { variant: Variant }) {
   return (
     <>
+      <EmailPrefsCard />
       <Card title="Apparence" description="Choisissez l'affichage clair, sombre, ou automatique selon votre appareil.">
         <ThemeToggle expanded />
       </Card>

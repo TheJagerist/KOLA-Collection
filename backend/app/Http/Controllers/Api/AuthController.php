@@ -7,6 +7,7 @@ use App\Http\Requests\LoginRequest;
 use App\Http\Requests\RegisterRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\Auth\IdentifierResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -27,10 +28,11 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request): JsonResponse
     {
-        $user = User::query()->where('username', $request->validated('username'))->first();
+        $user = IdentifierResolver::find($request->validated('login'));
 
         if (! $user || ! $user->password || ! Hash::check($request->validated('password'), $user->password)) {
-            throw ValidationException::withMessages(['username' => __('auth.failed')]);
+            // Clés « login » et « username » : compatibilité avec les anciennes versions du front
+            throw ValidationException::withMessages(['login' => __('auth.failed'), 'username' => __('auth.failed')]);
         }
 
         return response()->json($this->tokenPayload($user));

@@ -9,6 +9,8 @@ import type { CarouselImage, Collection, HomepageContent, Order, OrderEvent, Ord
 export interface MockUser extends User {
   password: string;
   admin_note?: string | null;
+  /** Démo : identifiants des passkeys enregistrées sur ce navigateur */
+  passkeys?: { id: number; name: string; credential_id: string; created_at: string; last_used_at: string | null }[];
 }
 
 export interface MockDb {

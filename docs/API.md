@@ -259,8 +259,16 @@ GET    /api/health
 GET    /api/storefront
 GET    /api/products                          (chaque produit expose `stock`)
 GET    /api/products/{idOrSlug}
-POST   /api/auth/register
-POST   /api/auth/login
+POST   /api/auth/register                     { full_name, username, password, password_confirmation, role, phone (obligatoire, unique), email? }
+POST   /api/auth/login                        { login: identifiant | e-mail | téléphone, password }
+POST   /api/auth/code                         { login, channel? } → code à 6 chiffres par e-mail ou SMS
+POST   /api/auth/code/verify                  { login, code } → { token, user }
+POST   /api/auth/passkeys/login/options       défi WebAuthn (empreinte / Face ID)
+POST   /api/auth/passkeys/login               { challenge_id, id, client_data_json, authenticator_data, signature }
+GET    /api/auth/passkeys                     🔒  appareils enregistrés
+POST   /api/auth/passkeys/options             🔒  options d'enregistrement
+POST   /api/auth/passkeys                     🔒  { client_data_json, attestation_object, name? }
+DELETE /api/auth/passkeys/{id}                🔒
 POST   /api/auth/logout                       🔒
 GET    /api/auth/me                           🔒
 PATCH  /api/auth/me                           🔒
@@ -303,6 +311,13 @@ POST/PUT/DELETE /api/admin/products…            ✓    |             |
 GET|POST /api/admin/promos, PUT|DELETE /{id}    ✓    |             |
 GET|POST /api/admin/team, PATCH|DELETE /{user}  ✓    |             |
 ```
+
+### Connexion (12 oct., soir)
+
+- **Identifiant unique** : `login` accepte le nom d'utilisateur, l'e-mail ou le téléphone (`06 444 55 66`, `+242…`). `username` reste accepté.
+- **Code à usage unique** (table `login_codes`) : 6 chiffres hachés, 10 min, 5 essais, 1 envoi / 45 s, 5 / heure par identifiant. Canal : e-mail si l'identifiant est un e-mail, SMS si c'est un téléphone, sinon e-mail puis SMS. En dev (`APP_DEBUG=true` + mailer `log` / SMS `log`), la réponse contient `dev_code`.
+- **Passkeys** (table `passkeys`, lib `lbuchs/webauthn`) : clé « découvrable » + vérification de l'utilisateur obligatoire. Défis en cache 5 min. Fonctionne en HTTPS (ou `localhost`). `KOLA_WEBAUTHN_RP_ID` = domaine du site.
+- **E-mails client** : `users.email_notifications` (PATCH /auth/me). Évènements `OrderPlaced` et `OrderStatusChanged` → `EmailCustomerAboutOrder` → `OrderUpdateForCustomer` (commande enregistrée, acompte reçu, en route, livrée, annulée).
 
 ### Nouveautés (12 oct.)
 

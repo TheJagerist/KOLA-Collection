@@ -3,6 +3,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { Toaster } from './components/ui/Toaster';
 import { DevApiBanner } from './components/layout/DevApiBanner';
+import { PasskeyOffer } from './components/profile/PasskeyOffer';
 import { useAuth } from './stores/auth';
 import Home from './pages/Home';
 
@@ -95,6 +96,7 @@ export default function App() {
       <RouterProvider router={router} />
       <Toaster />
       <DevApiBanner />
+      <PasskeyOffer />
     </>
   );
 }

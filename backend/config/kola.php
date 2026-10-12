@@ -18,4 +18,20 @@ return [
             'base_url' => env('CINETPAY_BASE_URL', 'https://api-checkout.cinetpay.com/v2'),
         ],
     ],
+
+    // SMS (codes de connexion) : log (dev : écrit dans les logs) | africastalking
+    'sms' => [
+        'driver' => env('KOLA_SMS_DRIVER', 'log'),
+        'africastalking' => [
+            'username' => env('AT_USERNAME'),
+            'api_key' => env('AT_API_KEY'),
+            'sender_id' => env('AT_SENDER_ID'),
+        ],
+    ],
+
+    // Connexion par empreinte / Face ID (WebAuthn). rp_id = domaine du site, sans https:// ni port.
+    'webauthn' => [
+        'rp_id' => env('KOLA_WEBAUTHN_RP_ID') ?: (parse_url((string) env('FRONTEND_URL', 'http://localhost'), PHP_URL_HOST) ?: 'localhost'),
+        'rp_name' => 'Kōlā Collection',
+    ],
 ];

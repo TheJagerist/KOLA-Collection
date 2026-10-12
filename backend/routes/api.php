@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\GoogleAuthController;
+use App\Http\Controllers\Api\LoginCodeController;
+use App\Http\Controllers\Api\PasskeyController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ProductController;
@@ -33,6 +35,12 @@ Route::get('/products/{idOrSlug}', [ProductController::class, 'show']);
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:auth');   // ✅
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:auth');         // ✅
+    // Code à usage unique par e-mail / SMS
+    Route::post('/code', [LoginCodeController::class, 'request'])->middleware(['throttle:auth', 'throttle:login-code']);
+    Route::post('/code/verify', [LoginCodeController::class, 'verify'])->middleware('throttle:auth');
+    // Empreinte / Face ID (passkeys)
+    Route::post('/passkeys/login/options', [PasskeyController::class, 'loginOptions'])->middleware('throttle:auth');
+    Route::post('/passkeys/login', [PasskeyController::class, 'login'])->middleware('throttle:auth');
     Route::get('/google/redirect', [GoogleAuthController::class, 'redirect']);                     // ✅
     Route::get('/google/callback', [GoogleAuthController::class, 'callback']);                     // ✅
 
@@ -46,6 +54,12 @@ Route::prefix('auth')->group(function () {
         Route::delete('/me/avatar', [ProfileController::class, 'deleteAvatar']);
         Route::put('/password', [ProfileController::class, 'updatePassword'])->middleware('throttle:auth');
         Route::post('/logout-others', [ProfileController::class, 'logoutOthers']);
+
+        // Appareils autorisés à se connecter par empreinte / Face ID
+        Route::get('/passkeys', [PasskeyController::class, 'index']);
+        Route::post('/passkeys/options', [PasskeyController::class, 'registerOptions']);
+        Route::post('/passkeys', [PasskeyController::class, 'store']);
+        Route::delete('/passkeys/{passkey}', [PasskeyController::class, 'destroy']);
     });
 });
 

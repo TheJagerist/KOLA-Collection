@@ -164,8 +164,10 @@ class AdminFeaturesTest extends TestCase
     public function test_team_management_keeps_one_manager(): void
     {
         $gerant = $this->staff();
-        $id = $this->actingAs($gerant)->postJson('/api/admin/team', ['full_name' => 'Hervé', 'username' => 'herve', 'password' => 'motdepasse', 'staff_role' => 'livreur'])
-            ->assertCreated()->assertJsonPath('data.staff_role', 'livreur')->json('data.id');
+        $this->actingAs($gerant)->postJson('/api/admin/team', ['full_name' => 'Hervé', 'username' => 'herve', 'password' => 'motdepasse', 'password_confirmation' => 'autre', 'staff_role' => 'livreur', 'phone' => ''])
+            ->assertUnprocessable()->assertJsonValidationErrors(['password', 'phone']);
+        $id = $this->actingAs($gerant)->postJson('/api/admin/team', ['full_name' => 'Hervé', 'username' => 'herve', 'password' => 'motdepasse', 'password_confirmation' => 'motdepasse', 'staff_role' => 'livreur', 'phone' => '06 555 44 33'])
+            ->assertCreated()->assertJsonPath('data.phone', '065554433')->assertJsonPath('data.staff_role', 'livreur')->json('data.id');
         $this->postJson('/api/auth/login', ['username' => 'herve', 'password' => 'motdepasse'])->assertOk()->assertJsonPath('user.staff_role', 'livreur');
 
         $this->actingAs($gerant)->patchJson("/api/admin/team/{$gerant->id}", ['staff_role' => 'livreur'])->assertStatus(422);

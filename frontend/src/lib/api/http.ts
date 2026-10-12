@@ -1,4 +1,7 @@
 import {
+  type LoginCodeSent,
+  type PasskeyInfo,
+  type WebAuthnJson,
   ApiError,
   type AuthResponse,
   type CarouselImage,
@@ -90,6 +93,16 @@ export const httpApi: KolaApi = {
 
   register: (payload) => request<AuthResponse>('POST', '/auth/register', { ...payload }),
   login: (payload) => request<AuthResponse>('POST', '/auth/login', { ...payload }),
+  requestLoginCode: (login, channel) => request<LoginCodeSent>('POST', '/auth/code', { login, channel }),
+  verifyLoginCode: (login, code) => request<AuthResponse>('POST', '/auth/code/verify', { login, code }),
+  passkeys: {
+    list: () => request<PasskeyInfo[]>('GET', '/auth/passkeys'),
+    registerOptions: () => request<WebAuthnJson>('POST', '/auth/passkeys/options'),
+    register: (payload) => request<PasskeyInfo>('POST', '/auth/passkeys', { ...payload }),
+    remove: (id) => request<void>('DELETE', `/auth/passkeys/${id}`),
+    loginOptions: () => request<{ challenge_id: string; options: WebAuthnJson }>('POST', '/auth/passkeys/login/options'),
+    login: (payload) => request<AuthResponse>('POST', '/auth/passkeys/login', { ...payload }),
+  },
   logout: () => request<void>('POST', '/auth/logout'),
   me: () => request<User>('GET', '/auth/me'),
 

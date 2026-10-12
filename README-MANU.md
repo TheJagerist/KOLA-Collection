@@ -190,6 +190,10 @@ Si tu dois changer un format de réponse : préviens Mulho et mettez à jour `do
 > - **Rôles** : gérant (tout), préparateur (commandes, clients, préparation, livraisons), livreur (ses livraisons). Comptes de démo : `prepa` / `kola1234`, `livreur` / `kola1234`.
 > - **À faire pour la prod** : compte **CinetPay** (`KOLA_PAYMENT_DRIVER=cinetpay`, `CINETPAY_SITE_ID`, `CINETPAY_API_KEY`), SMTP + `KOLA_NOTIFY_EMAILS` pour les e-mails, et passer les mails en queue.
 
+> **Inscription (12 oct., nuit)** : téléphone **obligatoire et unique** à l'inscription, confirmation du mot de passe (`password_confirmation`, règle `confirmed`) à l'inscription et pour les comptes de l'équipe ; un client ne peut plus vider son téléphone dans son profil. Tests adaptés.
+>
+> **Mise à jour (12 oct., soir) — connexion (Mulho)** : connexion par **e-mail / téléphone / identifiant**, **code à usage unique** par e-mail ou SMS (`LoginCodeController`, `LoginCodeService`, `Services/Sms/*`), **empreinte / Face ID** (`PasskeyController`, lib `lbuchs/webauthn`), **e-mails au client** à chaque étape de la commande (`OrderStatusChanged` déclenché par `Order::transitionTo()`, listener `EmailCustomerAboutOrder`). Migration `2026_10_12_000100_add_login_methods.php`. Le message `auth.failed` devient « Identifiant ou mot de passe incorrect. » (ton `AuthTest` est adapté). 47 tests au vert. **Pour la prod** : SMTP (`MAIL_*`), SMS Africa's Talking (`KOLA_SMS_DRIVER=africastalking`, `AT_*`), `KOLA_WEBAUTHN_RP_ID=kolacollection.cg`, et `APP_DEBUG=false` (sinon `dev_code` est renvoyé).
+
 ### ✅ Priorité 1 — Back-office : fait
 - [x] Commandes admin (liste + filtre `?status=`, changement de statut via `transitionTo()`)
 - [x] Collections (liste, création avec slug unique, activation)
@@ -215,7 +219,8 @@ Si tu dois changer un format de réponse : préviens Mulho et mettez à jour `do
 - [ ] Passer ces envois en **queue** (`QUEUE_CONNECTION=database` est prêt ; ajouter un service `queue` dans `docker-compose.yml` avec `php artisan queue:work`).
 
 ### Priorité 6 — Comptes
-- [ ] Mot de passe oublié : par SMS (Africa's Talking / Twilio) ou par question à l'admin — à décider avec l'équipe.
+- [x] Mot de passe oublié : connexion par code SMS / e-mail, puis changement du mot de passe dans le profil.
+- [ ] Brancher un vrai fournisseur SMS (Africa's Talking prêt, à configurer).
 - [x] `PATCH /api/auth/me`, photo de profil, changement de mot de passe, déconnexion des autres appareils (fait).
 - [ ] Optionnel : profils enfants (prénom, taille, niveau) pour pré-remplir les commandes des parents.
 

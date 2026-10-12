@@ -5,7 +5,10 @@ interface AuthState {
   user: User | null;
   status: 'idle' | 'loading' | 'ready';
   bootstrap: () => Promise<void>;
-  signIn: (token: string, user: User) => void;
+  signIn: (token: string, user: User, opts?: { offerPasskey?: boolean }) => void;
+  /** Proposer d'activer l'empreinte / Face ID juste après une connexion */
+  offerPasskey: boolean;
+  dismissPasskeyOffer: () => void;
   /** Après une modification du profil */
   setUser: (user: User) => void;
   signOut: () => Promise<void>;
@@ -14,6 +17,8 @@ interface AuthState {
 export const useAuth = create<AuthState>((set) => ({
   user: null,
   status: 'idle',
+  offerPasskey: false,
+  dismissPasskeyOffer: () => set({ offerPasskey: false }),
   bootstrap: async () => {
     if (!getToken()) {
       set({ status: 'ready' });
@@ -29,9 +34,9 @@ export const useAuth = create<AuthState>((set) => ({
     }
   },
   setUser: (user) => set({ user }),
-  signIn: (token, user) => {
+  signIn: (token, user, opts) => {
     setToken(token);
-    set({ user, status: 'ready' });
+    set({ user, status: 'ready', offerPasskey: !!opts?.offerPasskey });
   },
   signOut: async () => {
     try {
@@ -40,6 +45,6 @@ export const useAuth = create<AuthState>((set) => ({
       /* déconnexion locale quoi qu'il arrive */
     }
     setToken(null);
-    set({ user: null });
+    set({ user: null, offerPasskey: false });
   },
 }));

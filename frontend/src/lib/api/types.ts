@@ -17,6 +17,8 @@ export interface User {
   full_name: string;
   username: string | null;
   email: string | null;
+  /** Reçoit les reçus et le suivi de commande par e-mail */
+  email_notifications?: boolean;
   role: Role;
   is_admin: boolean;
   created_at: string;
@@ -33,7 +35,7 @@ export interface User {
 }
 
 /** PATCH /api/auth/me — tous les champs sont optionnels */
-export type ProfileInput = Partial<Pick<User, 'full_name' | 'username' | 'email' | 'phone' | 'role' | 'default_city' | 'default_address'>>;
+export type ProfileInput = Partial<Pick<User, 'full_name' | 'username' | 'email' | 'phone' | 'role' | 'default_city' | 'default_address' | 'email_notifications'>>;
 
 export interface PasswordInput {
   current_password: string;
@@ -192,6 +194,7 @@ export interface StaffInput {
   full_name: string;
   username?: string;
   password?: string;
+  password_confirmation?: string;
   staff_role: StaffRole;
   phone?: string | null;
 }
@@ -275,13 +278,58 @@ export interface RegisterPayload {
   full_name: string;
   username: string;
   password: string;
+  password_confirmation: string;
   role: Role;
+  /** Obligatoire : 9 chiffres (06…) */
+  phone: string;
+  /** Facultatif */
+  email?: string | null;
 }
 
 export interface LoginPayload {
-  username: string;
+  /** Nom d'utilisateur, e-mail ou téléphone */
+  login: string;
   password: string;
 }
+
+/** POST /api/auth/code */
+export interface LoginCodeSent {
+  channel: 'email' | 'sms';
+  /** Adresse ou numéro masqué : aw•••@exemple.cg, +242 06 ••• •• 33 */
+  destination: string;
+  expires_in: number;
+  /** Renvoyé seulement en développement (e-mails et SMS écrits dans les logs) */
+  dev_code: string | null;
+}
+
+export interface PasskeyInfo {
+  id: number;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+/** Données renvoyées par navigator.credentials.create, encodées en base64url */
+export interface PasskeyRegistration {
+  /** Identifiant de la clé (base64url) */
+  id?: string;
+  client_data_json: string;
+  attestation_object: string;
+  name?: string;
+}
+
+/** Données renvoyées par navigator.credentials.get, encodées en base64url */
+export interface PasskeyAssertion {
+  challenge_id: string;
+  id: string;
+  client_data_json: string;
+  authenticator_data: string;
+  signature: string;
+}
+
+/** Options WebAuthn telles que renvoyées par l'API (binaire en base64url) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type WebAuthnJson = { publicKey: Record<string, any> };
 
 export interface ProductInput {
   name: string;
@@ -322,6 +370,18 @@ export interface KolaApi {
   // Authentification
   register(payload: RegisterPayload): Promise<AuthResponse>;
   login(payload: LoginPayload): Promise<AuthResponse>;
+  /** Code à usage unique par e-mail ou SMS */
+  requestLoginCode(login: string, channel?: 'email' | 'sms'): Promise<LoginCodeSent>;
+  verifyLoginCode(login: string, code: string): Promise<AuthResponse>;
+  /** Empreinte digitale / Face ID (passkeys) */
+  passkeys: {
+    list(): Promise<PasskeyInfo[]>;
+    registerOptions(): Promise<WebAuthnJson>;
+    register(payload: PasskeyRegistration): Promise<PasskeyInfo>;
+    remove(id: number): Promise<void>;
+    loginOptions(): Promise<{ challenge_id: string; options: WebAuthnJson }>;
+    login(payload: PasskeyAssertion): Promise<AuthResponse>;
+  };
   logout(): Promise<void>;
   me(): Promise<User>;
 

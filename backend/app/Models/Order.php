@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Events\OrderStatusChanged;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -155,6 +156,8 @@ class Order extends Model
 
             $this->log('status', $note, $from->value, $status->value);
         });
+
+        OrderStatusChanged::dispatch($this, $from, $status);
     }
 
     public function scopeReference($q, string $ref)

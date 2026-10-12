@@ -4,18 +4,25 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
+/** Connexion par mot de passe : identifiant = nom d'utilisateur, e-mail ou téléphone */
 class LoginRequest extends FormRequest
 {
     protected function prepareForValidation(): void
     {
-        $this->merge(['username' => strtolower(trim((string) $this->input('username')))]);
+        // « username » reste accepté pour les anciens clients de l'API
+        $this->merge(['login' => trim((string) ($this->input('login') ?? $this->input('username')))]);
     }
 
     public function rules(): array
     {
         return [
-            'username' => ['required', 'string', 'max:20'],
+            'login' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'max:100'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return ['login.required' => 'Indiquez votre e-mail, votre téléphone ou votre nom d’utilisateur.'];
     }
 }

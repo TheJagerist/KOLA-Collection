@@ -128,25 +128,36 @@ function StaffForm({ member, self, onDone }: { member: StaffMember | null; self:
   const [phone, setPhone] = useState(member?.phone ?? '');
   const [role, setRole] = useState<StaffRole>(member?.staff_role ?? 'preparateur');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [errors, setErrors] = useState<Record<string, string[]>>({});
 
   const save = useAdminMutation(
     () => {
-      const ph = phone.replace(/\D/g, '').replace(/^242/, '') || null;
+      const ph = phone.replace(/\D/g, '').replace(/^(00)?242/, '') || null;
       return member
-        ? api.admin.updateStaff(member.id, { full_name: fullName.trim(), staff_role: role, phone: ph, ...(password ? { password } : {}) })
-        : api.admin.createStaff({ full_name: fullName.trim(), username: username.trim().toLowerCase(), password, staff_role: role, phone: ph });
+        ? api.admin.updateStaff(member.id, { full_name: fullName.trim(), staff_role: role, phone: ph, ...(password ? { password, password_confirmation: confirm } : {}) })
+        : api.admin.createStaff({ full_name: fullName.trim(), username: username.trim().toLowerCase(), password, password_confirmation: confirm, staff_role: role, phone: ph });
     },
     { success: member ? 'Membre mis à jour' : 'Membre ajouté', invalidate: [qk.admin.team, qk.admin.couriers] },
   );
   const err = (k: string) => errors[k]?.[0];
+  const mismatch = (password || confirm) && confirm !== password;
+  // Laravel rapporte « confirmed » sur le champ mot de passe : on l'affiche sous la confirmation
+  const pwErr = err('password');
+  const pwIsMismatch = pwErr && /correspondent/.test(pwErr);
 
   return (
     <form
       className="space-y-4"
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        setErrors({});
+        const local: Record<string, string[]> = {};
+        if (!phone.replace(/\D/g, '')) local.phone = ['Indiquez le téléphone du membre.'];
+        if (!member && password.length < 8) local.password = ['8 caractères minimum.'];
+        if ((password || !member) && confirm !== password) local.password_confirmation = ['Les deux mots de passe ne correspondent pas.'];
+        setErrors(local);
+        if (Object.keys(local).length) return;
         save.mutate(undefined, { onSuccess: onDone, onError: (x) => x instanceof ApiError && setErrors(x.errors) });
       }}
     >
@@ -158,7 +169,7 @@ function StaffForm({ member, self, onDone }: { member: StaffMember | null; self:
           <input className="field h-11 py-0" value={username} onChange={(e) => setUsername(e.target.value)} required disabled={!!member} placeholder="ex. junior" />
         </L>
         <L label="Téléphone" error={err('phone')}>
-          <input className="field h-11 py-0" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 123 45 67" />
+          <input className="field h-11 py-0" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 123 45 67" required />
         </L>
       </div>
 
@@ -181,12 +192,22 @@ function StaffForm({ member, self, onDone }: { member: StaffMember | null; self:
         {err('staff_role') && <p className="mt-1.5 text-[12px] font-medium text-rouille-600">{err('staff_role')}</p>}
       </fieldset>
 
-      <L label={member ? 'Nouveau mot de passe (facultatif)' : 'Mot de passe provisoire'} error={err('password')} hint="8 caractères minimum — à transmettre à la personne, qui pourra le changer dans son profil.">
-        <div className="relative">
-          <KeyRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-muted" />
-          <input className="field h-11 py-0 pl-9" type="text" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required={!member} />
-        </div>
-      </L>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <L label={member ? 'Nouveau mot de passe (facultatif)' : 'Mot de passe provisoire'} error={pwIsMismatch ? undefined : pwErr} hint="8 caractères minimum.">
+          <div className="relative">
+            <KeyRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-muted" />
+            <input className="field h-11 py-0 pl-9" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required={!member} />
+          </div>
+        </L>
+        <L
+          label="Confirmer le mot de passe"
+          error={err('password_confirmation') ?? (pwIsMismatch ? pwErr : undefined)}
+          hint={confirm && !mismatch ? '✓ Identiques' : undefined}
+        >
+          <input className="field h-11 py-0" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required={!member || !!password} disabled={!!member && !password} />
+        </L>
+      </div>
+      <p className="-mt-1 text-[12px] text-ink-muted">À transmettre à la personne : elle pourra le changer dans son profil.</p>
 
       <div className="grid gap-2 pt-1 sm:grid-cols-2">
         <Button type="button" variant="outline" onClick={onDone}>

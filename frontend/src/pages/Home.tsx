@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { animate, AnimatePresence, motion, useInView, useMotionValue, useScroll, useSpring, useTransform } from 'motion/react';
 import { ArrowRight, ArrowUpRight, ChevronDown, CreditCard, Ruler, ShieldCheck, Smartphone, Truck } from 'lucide-react';
@@ -13,10 +13,8 @@ import { CATEGORY_PLURAL } from '../lib/format';
 import { contactWhatsAppLink } from '../lib/whatsapp';
 import { Tilt3D } from '../components/fx/Tilt3D';
 import { Carousel3D } from '../components/fx/Carousel3D';
-import { canRender3D } from '../components/fx/canRender3D';
 
 // three.js (~150 Ko gzip) n'est téléchargé que si l'appareil peut afficher la scène 3D
-const FabricScene = lazy(() => import('../components/fx/FabricScene'));
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -50,7 +48,6 @@ function Hero() {
   const { data } = useStorefront();
   const user = useAuth((s) => s.user);
   const content = data?.homepage ?? FALLBACK;
-  const [show3D] = useState(canRender3D);
   const images = data?.carousel ?? [];
   const [index, setIndex] = useState(0);
   const ref = useRef<HTMLElement>(null);
@@ -177,11 +174,6 @@ function Hero() {
           transition={{ duration: 1, delay: 0.4, ease: EASE }}
           className="relative hidden justify-self-end [perspective:1000px] lg:block"
         >
-          {show3D && (
-            <Suspense fallback={null}>
-              <FabricScene className="pointer-events-none absolute -inset-x-48 -inset-y-32 opacity-80 mix-blend-screen [mask-image:radial-gradient(closest-side,black_55%,transparent)]" />
-            </Suspense>
-          )}
           <motion.div style={{ rotateX: rx, rotateY: ry }} className="relative">
             <div className="animate-float">
               <UniformCard />

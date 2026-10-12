@@ -24,14 +24,20 @@ class TeamController extends Controller
     /** POST /api/admin/team { full_name, username, password, staff_role, phone } */
     public function store(Request $request): JsonResponse
     {
-        $request->merge(['username' => strtolower(trim((string) $request->input('username')))]);
+        $request->merge([
+            'username' => strtolower(trim((string) $request->input('username'))),
+            'phone' => preg_replace('/^(00)?242/', '', preg_replace('/\D/', '', (string) $request->input('phone'))) ?: null,
+        ]);
         $data = $request->validate([
             'full_name' => ['required', 'string', 'max:120'],
             'username' => ['required', 'regex:/^[a-z0-9._-]{3,20}$/', 'unique:users,username'],
-            'password' => ['required', 'string', 'min:8', 'max:100'],
+            'password' => ['required', 'string', 'min:8', 'max:100', 'confirmed'],
             'staff_role' => ['required', Rule::enum(StaffRole::class)],
-            'phone' => ['nullable', 'regex:/^0\d{8}$/'],
+            'phone' => ['required', 'regex:/^0\d{8}$/'],
         ], [
+            'phone.required' => 'Indiquez le téléphone du membre (il sera joint par l’équipe et les clients).',
+            'phone.regex' => 'Numéro invalide : 9 chiffres commençant par 0.',
+            'password.confirmed' => 'Les deux mots de passe ne correspondent pas.',
             'username.unique' => "Ce nom d'utilisateur est déjà pris.",
             'username.regex' => "Nom d'utilisateur : 3 à 20 caractères (lettres, chiffres, . _ -).",
         ]);
@@ -49,11 +55,18 @@ class TeamController extends Controller
     public function update(Request $request, User $user): JsonResponse
     {
         abort_unless($user->is_admin, 404);
+        if ($request->has('phone')) {
+            $request->merge(['phone' => preg_replace('/^(00)?242/', '', preg_replace('/\D/', '', (string) $request->input('phone'))) ?: null]);
+        }
         $data = $request->validate([
             'full_name' => ['sometimes', 'string', 'max:120'],
             'staff_role' => ['sometimes', Rule::enum(StaffRole::class)],
-            'phone' => ['sometimes', 'nullable', 'regex:/^0\d{8}$/'],
-            'password' => ['sometimes', 'string', 'min:8', 'max:100'],
+            'phone' => ['sometimes', 'required', 'regex:/^0\d{8}$/'],
+            'password' => ['sometimes', 'string', 'min:8', 'max:100', 'confirmed'],
+        ], [
+            'password.confirmed' => 'Les deux mots de passe ne correspondent pas.',
+            'phone.required' => 'Indiquez le téléphone du membre.',
+            'phone.regex' => 'Numéro invalide : 9 chiffres commençant par 0.',
         ]);
 
         if (isset($data['staff_role']) && $data['staff_role'] !== StaffRole::Gerant->value) {
